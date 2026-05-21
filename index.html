@@ -86,7 +86,7 @@
 
     <section id="projects" class="page">
       <div class="card">
-        <div class="section-title"><h3>项目明细台账</h3><span id="projectScopeText">仅显示当前账号可见项目</span></div>
+        <div class="section-title"><h3>项目明细台账</h3><span id="projectScopeText">仅显示当前账号可见项目；新增项目表单已按业务流程分组</span></div>
         <div class="filters">
           <input id="searchText" placeholder="搜索单位、联系人、研究方向、产品名" />
           <select id="filterRegion"><option value="">全部区域</option></select>
@@ -174,31 +174,174 @@
       <h3 id="drawerTitle">新增销售项目</h3>
       <button class="close" id="closeDrawerBtn">关闭</button>
     </div>
-    <div class="form-grid">
+    <div class="drawer-subtitle">
+      请按“归属负责人 → 客户信息 → 产品与金额 → 推进状态 → 应用场景与下一步动作”的顺序填写。带 <b>*</b> 的字段建议必填。
+    </div>
+
+    <div class="form-grid enhanced">
       <input id="f_id" type="hidden" />
-      <select id="f_ownerUserId"></select>
-      <select id="f_region"></select>
-      <select id="f_category"></select>
-      <input id="f_company" placeholder="单位名称" />
-      <input id="f_department" placeholder="院系 / 科室 / 实验室" />
-      <input id="f_contact" placeholder="联系人姓名" />
-      <input id="f_title" placeholder="职务" />
-      <select id="f_level"></select>
-      <select id="f_productLine"></select>
-      <select id="f_productName"></select>
-      <input id="f_budget" type="number" placeholder="项目预算(元)" />
-      <input id="f_amount" type="number" placeholder="预计成交金额(元)" />
-      <input id="f_win" type="number" min="0" max="1" step=".05" placeholder="商机赢率，如0.5" />
-      <select id="f_stage"></select>
-      <select id="f_team"></select>
-      <select id="f_priority"></select>
-      <select id="f_key"></select>
-      <select id="f_risk"></select>
-      <select id="f_boss"></select>
-      <textarea id="f_research" class="span3" placeholder="研究方向 / 应用场景"></textarea>
-      <textarea id="f_next" class="span3" placeholder="下一步动作"></textarea>
-      <textarea id="f_note" class="span3" placeholder="备注 / 风险原因"></textarea>
-      <button class="btn primary span3" id="saveProjectBtn">保存项目</button>
+
+      <div class="form-section span3">
+        <h4>一、项目归属</h4>
+        <p>销售账号新增项目时自动归属本人；总经理/管理员可以指定项目归属销售。</p>
+      </div>
+
+      <label class="field span2">
+        <span>项目负责人 / 归属销售 <b>*</b></span>
+        <select id="f_ownerUserId"></select>
+        <em>决定该项目由谁负责；销售角色不可改，系统自动归属当前账号。</em>
+      </label>
+
+      <label class="field">
+        <span>销售团队</span>
+        <select id="f_team"></select>
+        <em>例如：华北销售组、华东销售组、行业大客户组。</em>
+      </label>
+
+      <div class="form-section span3">
+        <h4>二、客户信息</h4>
+        <p>用于识别客户单位、联系人和客户价值等级。</p>
+      </div>
+
+      <label class="field">
+        <span>区域 <b>*</b></span>
+        <select id="f_region"></select>
+        <em>可在基础配置中维护，如北京、天津、华东。</em>
+      </label>
+
+      <label class="field">
+        <span>客户分类</span>
+        <select id="f_category"></select>
+        <em>高校、医院、研究院、企业等。</em>
+      </label>
+
+      <label class="field">
+        <span>客户等级</span>
+        <select id="f_level"></select>
+        <em>S/A/B/C，表示客户重要性或成交潜力。</em>
+      </label>
+
+      <label class="field span2">
+        <span>客户单位名称 <b>*</b></span>
+        <input id="f_company" placeholder="例如：北京某高校 / 天津某三甲医院" />
+        <em>建议填写完整单位名称，便于总经理视图检索。</em>
+      </label>
+
+      <label class="field">
+        <span>院系 / 科室 / 平台</span>
+        <input id="f_department" placeholder="例如：生命科学学院 / 转化医学平台" />
+        <em>用于定位具体采购或使用部门。</em>
+      </label>
+
+      <label class="field">
+        <span>联系人</span>
+        <input id="f_contact" placeholder="例如：张教授 / 李主任" />
+        <em>项目关键联系人或 PI。</em>
+      </label>
+
+      <label class="field">
+        <span>职务 / 角色</span>
+        <input id="f_title" placeholder="例如：PI / 平台负责人 / 设备处老师" />
+        <em>用于判断其在采购链条中的影响力。</em>
+      </label>
+
+      <div class="form-section span3">
+        <h4>三、产品与金额</h4>
+        <p>先选产品线/解决方案，再选择该产品线下的具体产品名。</p>
+      </div>
+
+      <label class="field">
+        <span>产品线 / 解决方案 <b>*</b></span>
+        <select id="f_productLine"></select>
+        <em>例如：科研仪器解决方案、智慧运维平台。</em>
+      </label>
+
+      <label class="field">
+        <span>具体产品名 <b>*</b></span>
+        <select id="f_productName"></select>
+        <em>会根据产品线自动联动；可在基础配置中维护。</em>
+      </label>
+
+      <label class="field">
+        <span>项目预算（元）</span>
+        <input id="f_budget" type="number" min="0" placeholder="例如：2000000" />
+        <em>客户侧预算或预计采购预算。</em>
+      </label>
+
+      <label class="field">
+        <span>预计成交金额（元）</span>
+        <input id="f_amount" type="number" min="0" placeholder="例如：1500000" />
+        <em>用于驾驶舱统计和加权预测。</em>
+      </label>
+
+      <label class="field">
+        <span>商机赢率</span>
+        <input id="f_win" type="number" min="0" max="1" step=".05" placeholder="0.00 - 1.00" />
+        <em>0.5 表示 50%；选择销售阶段后可自动带出建议赢率。</em>
+      </label>
+
+      <div class="form-section span3">
+        <h4>四、项目推进状态</h4>
+        <p>用于销售漏斗、重点项目排序和风险预警。</p>
+      </div>
+
+      <label class="field">
+        <span>销售阶段</span>
+        <select id="f_stage"></select>
+        <em>选择阶段后，系统会自动填入对应建议赢率。</em>
+      </label>
+
+      <label class="field">
+        <span>项目优先级</span>
+        <select id="f_priority"></select>
+        <em>S/A/B/C，S 代表最高优先级。</em>
+      </label>
+
+      <label class="field">
+        <span>是否重点项目</span>
+        <select id="f_key"></select>
+        <em>重点项目会进入总经理重点关注清单。</em>
+      </label>
+
+      <label class="field">
+        <span>风险等级</span>
+        <select id="f_risk"></select>
+        <em>高风险项目会在驾驶舱预警区显示。</em>
+      </label>
+
+      <label class="field">
+        <span>是否需要总经理介入</span>
+        <select id="f_boss"></select>
+        <em>如需高层拜访、价格决策、资源协调，请选“是”。</em>
+      </label>
+
+      <div class="form-section span3">
+        <h4>五、应用场景与下一步动作</h4>
+        <p>建议写清楚客户为什么需要、下一步由谁做、什么时候完成。</p>
+      </div>
+
+      <label class="field span3">
+        <span>研究方向 / 应用场景</span>
+        <textarea id="f_research" placeholder="例如：微生物单细胞分选、合成生物学筛选、样本库建设、设备智慧运维等"></textarea>
+        <em>用于产品匹配、售前支持和后续方案输出。</em>
+      </label>
+
+      <label class="field span3">
+        <span>下一步动作 <b>*</b></span>
+        <textarea id="f_next" placeholder="例如：本周完成技术交流；下周提交配置清单；月底前确认预算来源"></textarea>
+        <em>建议使用“动作 + 时间 + 负责人”的格式。</em>
+      </label>
+
+      <label class="field span3">
+        <span>备注 / 风险原因</span>
+        <textarea id="f_note" placeholder="例如：预算未落实、竞品已介入、参数需提前沟通、采购路径待确认"></textarea>
+        <em>用于销售例会复盘和总经理判断支持重点。</em>
+      </label>
+
+      <div class="form-actions span3">
+        <button class="btn" type="button" id="cancelProjectBtn">取消</button>
+        <button class="btn primary" type="button" id="saveProjectBtn">保存项目</button>
+      </div>
     </div>
   </div>
 </div>

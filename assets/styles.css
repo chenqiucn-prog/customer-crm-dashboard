@@ -34,3 +34,87 @@ table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}thead 
 .drawer{position:fixed;inset:0;background:rgba(15,23,42,.36);display:none;align-items:stretch;justify-content:flex-end;z-index:10}.drawer.open{display:flex}.drawer-panel{width:min(900px,94vw);background:#fff;padding:22px;overflow:auto;box-shadow:-20px 0 50px rgba(15,23,42,.18)}.drawer-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.drawer-head h3{margin:0}.close{border:0;background:#f1f5f9;border-radius:10px;padding:8px 11px;cursor:pointer}.empty{padding:24px;text-align:center;color:#64748b}
 .toast{position:fixed;right:22px;bottom:22px;background:#0b172a;color:#fff;border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);z-index:30;display:none;max-width:420px;font-size:13px}.toast.show{display:block}.action-link{border:0;background:transparent;color:#1268b3;font-weight:800;cursor:pointer;padding:0;margin-right:8px}
 @media(max-width:1100px){.app{grid-template-columns:1fr}aside{height:auto;position:relative}.kpis,.two,.three,.module-list,.settings-grid{grid-template-columns:1fr}.filters,.form-grid,.form-grid.compact{grid-template-columns:1fr}.form-grid .span2,.form-grid .span3{grid-column:auto}.topbar{align-items:flex-start;flex-direction:column}.inline-form{flex-direction:column}}
+
+
+/* 新增销售项目弹窗优化 */
+.drawer-subtitle{
+  margin:-4px 0 16px;
+  padding:12px 14px;
+  border-radius:14px;
+  background:#eff6ff;
+  border:1px solid #bfdbfe;
+  color:#1e3a8a;
+  font-size:13px;
+  line-height:1.7;
+}
+.drawer-subtitle b{color:#b91c1c}
+.form-grid.enhanced{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+}
+.form-section{
+  margin-top:6px;
+  padding:12px 14px;
+  border-radius:14px;
+  background:#f8fafc;
+  border:1px solid #e2e8f0;
+}
+.form-section h4{
+  margin:0 0 4px;
+  color:#0f3a63;
+  font-size:15px;
+}
+.form-section p{
+  margin:0;
+  color:#64748b;
+  font-size:12px;
+  line-height:1.6;
+}
+.field{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.field span{
+  font-size:13px;
+  font-weight:800;
+  color:#0f172a;
+}
+.field span b{
+  color:#dc2626;
+}
+.field em{
+  min-height:34px;
+  font-style:normal;
+  font-size:12px;
+  line-height:1.45;
+  color:#64748b;
+}
+.field input,
+.field select,
+.field textarea{
+  min-height:42px;
+}
+.field textarea{
+  min-height:92px;
+}
+.form-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:10px;
+  padding-top:4px;
+}
+.form-actions .btn{
+  min-width:120px;
+}
+select:disabled,
+input:disabled{
+  background:#f1f5f9;
+  color:#64748b;
+  cursor:not-allowed;
+}
+@media(max-width:1100px){
+  .form-grid.enhanced{grid-template-columns:1fr}
+  .form-actions{justify-content:stretch}
+  .form-actions .btn{width:100%}
+}
