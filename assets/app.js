@@ -101,12 +101,17 @@ async function bootstrapAfterLogin(){
     $("currentUserName").textContent = currentUser.name;
     $("currentUserRole").textContent = roleLabel(currentUser.role);
     $("currentUserEmail").textContent = currentUser.email;
+
+    await loadAll();
+
     $("loginScreen").classList.add("hidden");
     $("appRoot").classList.remove("hidden");
-    await loadAll();
     applyRoleBasedNavigation();
   }catch(err){
-    $("loginMsg").textContent = err.message;
+    console.error("登录后加载系统失败：", err);
+    if($("loginMsg")) $("loginMsg").textContent = err.message || "登录后加载系统失败。";
+    if($("loginScreen")) $("loginScreen").classList.remove("hidden");
+    if($("appRoot")) $("appRoot").classList.add("hidden");
     await supabase.auth.signOut();
   }
 }
@@ -583,7 +588,18 @@ function renderProjects(){
 }
 function renderKeyProjects(){const tbody=$("keyRows"); if(!tbody)return; const score={S:4,A:3,B:2,C:1}; const rows=[...projects].sort((a,b)=>(score[b.priority]||0)-(score[a.priority]||0)||weight(b)-weight(a)||Number(b.amount||0)-Number(a.amount||0)).slice(0,10); tbody.innerHTML=rows.length?rows.map((p,i)=>`<tr><td>${i+1}</td><td><strong>${esc(p.company)}</strong></td><td>${esc(p.owner)}</td><td>${esc(p.productLine)}</td><td>${esc(p.productName)}</td><td><span class="tag purple">${esc(p.priority)}</span></td><td>${esc(p.stage)}</td><td>${money(p.amount)}</td><td>${money(weight(p))}</td><td>${esc(p.next||"")}</td><td><span class="tag ${p.risk==='高'?'red':p.risk==='中'?'orange':'green'}">${esc(p.risk)}</span></td><td>${p.boss==="是"?'<span class="tag red">是</span>':'否'}</td></tr>`).join(""):`<tr><td colspan="12" class="empty">暂无重点项目</td></tr>`;}
 function renderFunnel(){const amounts={}; (config.stages||[]).forEach(s=>amounts[s.name]=0); projects.forEach(p=>amounts[p.stage]=(amounts[p.stage]||0)+weight(p)); renderBars("funnelBars",amounts); $("stageTips").innerHTML=(config.stages||[]).map(s=>`<div style="border-bottom:1px solid #edf2f7;padding:10px 0"><strong>${esc(s.name)}</strong><span class="tag" style="margin-left:8px">${Math.round(s.win*100)}%</span><div style="color:#64748b;font-size:13px;margin-top:4px">${esc(s.tip)}</div></div>`).join("");}
-function renderSettings(){ $("regionPills").innerHTML=(config.regions||[]).map(x=>`<span class="pill">${esc(x) renderTeamConfig();}${canEditConfig()?`<button data-remove-region="${esc(x)}">×</button>`:""}</span>`).join(""); fillSelect("configProductLine",Object.keys(config.productLines||{})); renderProductConfig();}
+function renderSettings(){
+  if($("regionPills")){
+    $("regionPills").innerHTML = (config.regions || []).map(x =>
+      `<span class="pill">${esc(x)}${canEditConfig()?`<button data-remove-region="${esc(x)}">×</button>`:""}</span>`
+    ).join("");
+  }
+
+  fillSelect("configProductLine", Object.keys(config.productLines || {}));
+  renderProductConfig();
+  renderTeamConfig();
+}
+
 function renderProductConfig(){
   const lines = Object.keys(config.productLines || {});
   const line = $("configProductLine")?.value || lines[0] || "";
@@ -910,24 +926,92 @@ async function exportJSON(){
 }
 function renderAll(){renderDashboard(); renderSalesStats(); renderProjects(); renderKeyProjects(); renderFunnel(); renderSettings(); renderProfile();}
 function showToast(msg){const el=$("toast"); el.textContent=msg; el.classList.add("show"); setTimeout(()=>el.classList.remove("show"),3200)}
-function bind(){
-  $("loginBtn").addEventListener("click", login);
-  $("loginPassword").addEventListener("keydown", e=>{if(e.key==="Enter")login();});
-  $("logoutBtn").addEventListener("click", logout);
-  document.querySelectorAll(".nav button").forEach(btn=>btn.addEventListener("click",()=>{const id=btn.dataset.page; if(!canSeeAll() && id==="dashboard"){setActivePage("projects"); return;} setActivePage(id); renderAll();}));
-  $("refreshBtn").addEventListener("click",loadAll); $("exportBtn").addEventListener("click",exportJSON); $("newBtn").addEventListener("click",()=>openDrawer()); if($("saveProfileBtn")) $("saveProfileBtn").addEventListener("click",saveProfile); if($("changePasswordBtn")) $("changePasswordBtn").addEventListener("click",changePassword); $("closeDrawerBtn").addEventListener("click",closeDrawer); $("cancelProjectBtn").addEventListener("click",closeDrawer); $("saveProjectBtn").addEventListener("click",saveProject); $("f_productLine").addEventListener("change",syncProductOptions); $("f_stage").addEventListener("change",()=>syncWinFromStage(true)); $("resetFilterBtn").addEventListener("click",clearFilters);
-  ["searchText","filterRegion","filterProductLine","filterStage","filterOwner","filterRisk"].forEach(id=>{ $(id).addEventListener("input",renderProjects); $(id).addEventListener("change",renderProjects); });
-  $("addRegionBtn").addEventListener("click",addRegion); $("addProductLineBtn").addEventListener("click",addProductLine); $("addProductNameBtn").addEventListener("click",addProductName); $("renameProductLineBtn").addEventListener("click",renameProductLine); $("deleteProductLineBtn").addEventListener("click",deleteProductLine); $("renameProductNameBtn").addEventListener("click",renameProductName); $("deleteProductNameBtn").addEventListener("click",deleteProductName); $("configProductLine").addEventListener("change",renderProductConfig); if($("configTeam")) $("configTeam").addEventListener("change",()=>{if($("editTeamName")) $("editTeamName").value = $("configTeam").value || "";}); if($("addTeamBtn")) $("addTeamBtn").addEventListener("click",addTeam); if($("renameTeamBtn")) $("renameTeamBtn").addEventListener("click",renameTeam); if($("deleteTeamBtn")) $("deleteTeamBtn").addEventListener("click",deleteTeam); $("configProductName").addEventListener("change",()=>{if($("editProductName")) $("editProductName").value = $("configProductName").value || "";});
-  document.body.addEventListener("click",(e)=>{if(e.target.dataset.edit)openDrawer(projects.find(p=>p.id===e.target.dataset.edit)); if(e.target.dataset.del)deleteProject(e.target.dataset.del); if(e.target.dataset.removeRegion)removeRegion(e.target.dataset.removeRegion); if(e.target.dataset.removeProduct)removeProduct(e.target.dataset.removeProduct); if(e.target.dataset.removeTeam)removeTeam(e.target.dataset.removeTeam);});
+function on(id, eventName, handler){
+  const el = $(id);
+  if(el) el.addEventListener(eventName, handler);
 }
+
+function bind(){
+  on("loginBtn", "click", login);
+  on("loginPassword", "keydown", e=>{ if(e.key==="Enter") login(); });
+  on("logoutBtn", "click", logout);
+
+  document.querySelectorAll(".nav button").forEach(btn=>btn.addEventListener("click",()=>{
+    const id=btn.dataset.page;
+    if(!canSeeAll() && id==="dashboard"){
+      setActivePage("projects");
+      return;
+    }
+    setActivePage(id);
+    renderAll();
+  }));
+
+  on("refreshBtn", "click", loadAll);
+  on("exportBtn", "click", exportJSON);
+  on("newBtn", "click", ()=>openDrawer());
+  on("saveProfileBtn", "click", saveProfile);
+  on("changePasswordBtn", "click", changePassword);
+  on("closeDrawerBtn", "click", closeDrawer);
+  on("cancelProjectBtn", "click", closeDrawer);
+  on("saveProjectBtn", "click", saveProject);
+  on("f_productLine", "change", syncProductOptions);
+  on("f_stage", "change", ()=>syncWinFromStage(true));
+  on("resetFilterBtn", "click", clearFilters);
+
+  ["searchText","filterRegion","filterProductLine","filterStage","filterOwner","filterRisk"].forEach(id=>{
+    on(id, "input", renderProjects);
+    on(id, "change", renderProjects);
+  });
+
+  on("addRegionBtn", "click", addRegion);
+  on("addProductLineBtn", "click", addProductLine);
+  on("addProductNameBtn", "click", addProductName);
+  on("renameProductLineBtn", "click", renameProductLine);
+  on("deleteProductLineBtn", "click", deleteProductLine);
+  on("renameProductNameBtn", "click", renameProductName);
+  on("deleteProductNameBtn", "click", deleteProductName);
+  on("configProductLine", "change", renderProductConfig);
+  on("configProductName", "change", ()=>{
+    if($("editProductName")) $("editProductName").value = $("configProductName").value || "";
+  });
+
+  on("configTeam", "change", ()=>{
+    if($("editTeamName")) $("editTeamName").value = $("configTeam").value || "";
+  });
+  on("addTeamBtn", "click", addTeam);
+  on("renameTeamBtn", "click", renameTeam);
+  on("deleteTeamBtn", "click", deleteTeam);
+
+  if(document.body){
+    document.body.addEventListener("click",(e)=>{
+      if(e.target.dataset.edit) openDrawer(projects.find(p=>p.id===e.target.dataset.edit));
+      if(e.target.dataset.del) deleteProject(e.target.dataset.del);
+      if(e.target.dataset.removeRegion) removeRegion(e.target.dataset.removeRegion);
+      if(e.target.dataset.removeProduct) removeProduct(e.target.dataset.removeProduct);
+      if(e.target.dataset.removeTeam) removeTeam(e.target.dataset.removeTeam);
+    });
+  }
+}
+
 async function start(){
-  bind();
+  try{
+    bind();
+  }catch(err){
+    console.error("初始化事件绑定失败：", err);
+    if($("loginMsg")) $("loginMsg").textContent = "页面初始化失败：" + (err.message || err);
+    return;
+  }
+
   try{
     await initSupabase();
     const s = await session();
     if(s) await bootstrapAfterLogin();
   }catch(err){
-    $("loginMsg").textContent = err.message;
+    console.error("初始化 Supabase 失败：", err);
+    if($("loginMsg")) $("loginMsg").textContent = err.message || "初始化失败，请检查环境变量。";
+    if($("loginScreen")) $("loginScreen").classList.remove("hidden");
+    if($("appRoot")) $("appRoot").classList.add("hidden");
   }
 }
 start();
+
