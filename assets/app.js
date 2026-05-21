@@ -104,6 +104,7 @@ async function bootstrapAfterLogin(){
     $("loginScreen").classList.add("hidden");
     $("appRoot").classList.remove("hidden");
     await loadAll();
+    applyRoleBasedNavigation();
   }catch(err){
     $("loginMsg").textContent = err.message;
     await supabase.auth.signOut();
@@ -116,6 +117,39 @@ function roleLabel(role){
 
 function canSeeAll(){ return ["general_manager","admin"].includes(currentUser?.role); }
 function canEditConfig(){ return ["general_manager","admin"].includes(currentUser?.role); }
+
+function getDefaultPageId(){
+  return canSeeAll() ? "dashboard" : "projects";
+}
+
+function setActivePage(pageId){
+  if(!canSeeAll() && pageId === "dashboard") pageId = "projects";
+
+  document.querySelectorAll(".nav button").forEach(b=>{
+    b.classList.toggle("active", b.dataset.page === pageId);
+  });
+
+  document.querySelectorAll(".page").forEach(p=>{
+    p.classList.toggle("active", p.id === pageId);
+  });
+
+  if(pageMeta[pageId]){
+    $("pageTitle").textContent = pageMeta[pageId][0];
+    $("pageDesc").textContent = pageMeta[pageId][1];
+  }
+}
+
+function applyRoleBasedNavigation(){
+  const salesOnly = !canSeeAll();
+
+  document.querySelectorAll("[data-manager-only='true']").forEach(el=>{
+    el.classList.toggle("hidden", salesOnly);
+  });
+
+  // 销售账号不显示总经理驾驶舱，默认进入项目明细台账
+  setActivePage(getDefaultPageId());
+}
+
 
 async function loadAll(){
   $("statusNotice").textContent = "正在读取云端数据...";
@@ -135,6 +169,14 @@ async function loadAll(){
   $("projectScopeText").textContent = scope === "all" ? "总经理/管理员视图：显示全量项目" : "销售视图：仅显示自己名下项目";
   initControls();
   renderAll();
+  if(currentUser) {
+    document.querySelectorAll("[data-manager-only='true']").forEach(el=>{
+      el.classList.toggle("hidden", !canSeeAll());
+    });
+    if(!canSeeAll() && document.querySelector("#dashboard")?.classList.contains("active")){
+      setActivePage("projects");
+    }
+  }
 }
 
 function money(n){n=Number(n||0); if(n>=100000000)return(n/100000000).toFixed(2)+"亿"; if(n>=10000)return(n/10000).toFixed(1)+"万"; return n.toLocaleString();}
@@ -161,6 +203,196 @@ function dateText(raw){
   if(Number.isNaN(d.getTime())) return "";
   return d.toISOString().slice(0,10);
 }
+
+function excelSafeText(value){
+  if(value === null || value === undefined) return "";
+  return String(value);
+}
+
+function buildProjectRowsForExcel(projectList){
+  return projectList.map((p, index) => ({
+    "序号": index + 1,
+    "项目ID": p.id || "",
+    "负责人": p.owner || "",
+    "负责人ID": p.ownerUserId || "",
+    "区域": p.region || "",
+    "客户分类": p.category || "",
+    "客户单位": p.company || "",
+    "院系/科室/平台": p.department || "",
+    "联系人": p.contact || "",
+    "职务/角色": p.title || "",
+    "客户等级": p.level || "",
+    "产品线/解决方案": p.productLine || "",
+    "具体产品名": p.productName || "",
+    "项目预算（元）": Number(p.budget || 0),
+    "预计成交金额（元）": Number(p.amount || 0),
+    "商机赢率": Number(p.win || 0),
+    "加权预测金额（元）": Math.round(weight(p) * 100) / 100,
+    "销售阶段": p.stage || "",
+    "项目优先级": p.priority || "",
+    "是否重点项目": p.key || "",
+    "风险等级": p.risk || "",
+    "是否需要总经理介入": p.boss || "",
+    "研究方向/应用场景": p.research || "",
+    "下一步动作": p.next || "",
+    "备注/风险原因": p.note || "",
+    "创建时间": dateText(p.createdAt),
+    "更新时间": dateText(p.updatedAt)
+  }));
+}
+
+function buildCustomerRowsForExcel(projectList){
+  const map = new Map();
+
+  projectList.forEach(p => {
+    const key = (p.company || "未填写客户单位").trim();
+    if(!map.has(key)){
+      map.set(key, {
+        company: key,
+        regionSet: new Set(),
+        categorySet: new Set(),
+        departmentSet: new Set(),
+        contactSet: new Set(),
+        titleSet: new Set(),
+        levelSet: new Set(),
+        ownerSet: new Set(),
+        productLineSet: new Set(),
+        productNameSet: new Set(),
+        stages: new Set(),
+        risks: new Set(),
+        projectCount: 0,
+        budget: 0,
+        amount: 0,
+        weighted: 0,
+        closedAmount: 0,
+        keyProjectCount: 0,
+        bossCount: 0,
+        lastAction: "",
+        updatedAt: "",
+        createdAt: ""
+      });
+    }
+
+    const row = map.get(key);
+    const add = (set, value) => { if(value) set.add(value); };
+
+    add(row.regionSet, p.region);
+    add(row.categorySet, p.category);
+    add(row.departmentSet, p.department);
+    add(row.contactSet, p.contact);
+    add(row.titleSet, p.title);
+    add(row.levelSet, p.level);
+    add(row.ownerSet, p.owner);
+    add(row.productLineSet, p.productLine);
+    add(row.productNameSet, p.productName);
+    add(row.stages, p.stage);
+    add(row.risks, p.risk);
+
+    row.projectCount += 1;
+    row.budget += Number(p.budget || 0);
+    row.amount += Number(p.amount || 0);
+    row.weighted += weight(p);
+    if(isClosedProject(p)) row.closedAmount += Number(p.amount || 0);
+    if(p.key === "是") row.keyProjectCount += 1;
+    if(p.boss === "是") row.bossCount += 1;
+
+    const pDate = projectDate(p);
+    const rowDate = row.updatedAt ? new Date(row.updatedAt) : null;
+    if(pDate && (!rowDate || pDate > rowDate)){
+      row.updatedAt = p.updatedAt || p.createdAt || "";
+      row.createdAt = p.createdAt || "";
+      row.lastAction = p.next || "";
+    }
+  });
+
+  return Array.from(map.values()).map((c, index) => ({
+    "序号": index + 1,
+    "客户单位": c.company,
+    "区域": Array.from(c.regionSet).join("、"),
+    "客户分类": Array.from(c.categorySet).join("、"),
+    "院系/科室/平台": Array.from(c.departmentSet).join("、"),
+    "联系人": Array.from(c.contactSet).join("、"),
+    "职务/角色": Array.from(c.titleSet).join("、"),
+    "客户等级": Array.from(c.levelSet).join("、"),
+    "负责人": Array.from(c.ownerSet).join("、"),
+    "产品线/解决方案": Array.from(c.productLineSet).join("、"),
+    "具体产品名": Array.from(c.productNameSet).join("、"),
+    "涉及项目数": c.projectCount,
+    "项目预算合计（元）": Math.round(c.budget * 100) / 100,
+    "预计成交金额合计（元）": Math.round(c.amount * 100) / 100,
+    "已成交金额合计（元）": Math.round(c.closedAmount * 100) / 100,
+    "加权预测金额合计（元）": Math.round(c.weighted * 100) / 100,
+    "重点项目数": c.keyProjectCount,
+    "需总经理介入项目数": c.bossCount,
+    "销售阶段": Array.from(c.stages).join("、"),
+    "风险等级": Array.from(c.risks).join("、"),
+    "最近下一步动作": c.lastAction,
+    "最近更新时间": dateText(c.updatedAt),
+    "首次创建时间": dateText(c.createdAt)
+  })).sort((a,b) => Number(b["预计成交金额合计（元）"] || 0) - Number(a["预计成交金额合计（元）"] || 0));
+}
+
+function autosizeWorksheetColumns(ws, rows){
+  if(!rows || !rows.length) return;
+  const headers = Object.keys(rows[0]);
+  ws["!cols"] = headers.map(h => {
+    const maxLen = Math.max(
+      String(h).length,
+      ...rows.slice(0, 200).map(r => excelSafeText(r[h]).length)
+    );
+    return { wch: Math.min(Math.max(maxLen + 2, 10), 42) };
+  });
+}
+
+async function exportExcel(){
+  try{
+    const exportData = await api("/api/export");
+    const exportProjects = exportData.projects || projects || [];
+    if(!exportProjects.length){
+      showToast("当前没有可导出的项目数据。");
+      return;
+    }
+
+    const XLSX = await import("https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs");
+
+    const customerRows = buildCustomerRowsForExcel(exportProjects);
+    const projectRows = buildProjectRowsForExcel(exportProjects);
+
+    const wb = XLSX.utils.book_new();
+
+    const customerWs = XLSX.utils.json_to_sheet(customerRows);
+    autosizeWorksheetColumns(customerWs, customerRows);
+    XLSX.utils.book_append_sheet(wb, customerWs, "客户信息");
+
+    const projectWs = XLSX.utils.json_to_sheet(projectRows);
+    autosizeWorksheetColumns(projectWs, projectRows);
+    XLSX.utils.book_append_sheet(wb, projectWs, "项目明细");
+
+    const statRows = [
+      {"指标":"导出范围", "数值": exportData.scope === "all" ? "全量项目" : "本人项目"},
+      {"指标":"导出人", "数值": exportData.user?.name || currentUser?.name || ""},
+      {"指标":"导出时间", "数值": new Date().toLocaleString()},
+      {"指标":"客户总数", "数值": customerRows.length},
+      {"指标":"项目总数", "数值": projectRows.length},
+      {"指标":"预计成交金额合计", "数值": sum(exportProjects, "amount")},
+      {"指标":"已成交金额合计", "数值": exportProjects.filter(isClosedProject).reduce((a,b)=>a+Number(b.amount||0),0)},
+      {"指标":"加权预测金额合计", "数值": exportProjects.reduce((a,b)=>a+weight(b),0)}
+    ];
+    const statWs = XLSX.utils.json_to_sheet(statRows);
+    autosizeWorksheetColumns(statWs, statRows);
+    XLSX.utils.book_append_sheet(wb, statWs, "导出说明");
+
+    const scopeText = exportData.scope === "all" ? "全量" : "本人";
+    const fileName = `客户项目管理_${scopeText}_客户信息与项目明细_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    showToast("Excel 已导出。");
+  }catch(e){
+    console.error(e);
+    showToast(e.message || "Excel 导出失败，请稍后重试。");
+  }
+}
+
 function groupedStats(arr, keyFn){
   const map = {};
   arr.forEach(p => {
@@ -352,13 +584,201 @@ function renderProjects(){
 function renderKeyProjects(){const tbody=$("keyRows"); if(!tbody)return; const score={S:4,A:3,B:2,C:1}; const rows=[...projects].sort((a,b)=>(score[b.priority]||0)-(score[a.priority]||0)||weight(b)-weight(a)||Number(b.amount||0)-Number(a.amount||0)).slice(0,10); tbody.innerHTML=rows.length?rows.map((p,i)=>`<tr><td>${i+1}</td><td><strong>${esc(p.company)}</strong></td><td>${esc(p.owner)}</td><td>${esc(p.productLine)}</td><td>${esc(p.productName)}</td><td><span class="tag purple">${esc(p.priority)}</span></td><td>${esc(p.stage)}</td><td>${money(p.amount)}</td><td>${money(weight(p))}</td><td>${esc(p.next||"")}</td><td><span class="tag ${p.risk==='高'?'red':p.risk==='中'?'orange':'green'}">${esc(p.risk)}</span></td><td>${p.boss==="是"?'<span class="tag red">是</span>':'否'}</td></tr>`).join(""):`<tr><td colspan="12" class="empty">暂无重点项目</td></tr>`;}
 function renderFunnel(){const amounts={}; (config.stages||[]).forEach(s=>amounts[s.name]=0); projects.forEach(p=>amounts[p.stage]=(amounts[p.stage]||0)+weight(p)); renderBars("funnelBars",amounts); $("stageTips").innerHTML=(config.stages||[]).map(s=>`<div style="border-bottom:1px solid #edf2f7;padding:10px 0"><strong>${esc(s.name)}</strong><span class="tag" style="margin-left:8px">${Math.round(s.win*100)}%</span><div style="color:#64748b;font-size:13px;margin-top:4px">${esc(s.tip)}</div></div>`).join("");}
 function renderSettings(){ $("regionPills").innerHTML=(config.regions||[]).map(x=>`<span class="pill">${esc(x)}${canEditConfig()?`<button data-remove-region="${esc(x)}">×</button>`:""}</span>`).join(""); fillSelect("configProductLine",Object.keys(config.productLines||{})); renderProductConfig();}
-function renderProductConfig(){const line=$("configProductLine")?.value||Object.keys(config.productLines||{})[0]; if($("configProductLine"))$("configProductLine").value=line||""; const items=(config.productLines||{})[line]||[]; $("productPills").innerHTML=`<div class="pill-list">${items.map(x=>`<span class="pill">${esc(x)}${canEditConfig()?`<button data-remove-product="${esc(x)}">×</button>`:""}</span>`).join("")}</div>`;}
+function renderProductConfig(){
+  const lines = Object.keys(config.productLines || {});
+  const line = $("configProductLine")?.value || lines[0] || "";
+
+  if($("configProductLine")){
+    fillSelect("configProductLine", lines);
+    $("configProductLine").value = line;
+  }
+
+  if($("editProductLineName")) $("editProductLineName").value = line || "";
+
+  const items = (config.productLines || {})[line] || [];
+
+  if($("configProductName")){
+    fillSelect("configProductName", items);
+  }
+
+  const selectedProductName = $("configProductName")?.value || items[0] || "";
+  if($("configProductName")) $("configProductName").value = selectedProductName;
+  if($("editProductName")) $("editProductName").value = selectedProductName || "";
+
+  if($("productPills")){
+    $("productPills").innerHTML = `<div class="pill-list">${items.map(x=>`<span class="pill">${esc(x)}${canEditConfig()?`<button data-remove-product="${esc(x)}">×</button>`:""}</span>`).join("")}</div>`;
+  }
+}
 async function saveConfig(){ if(!canEditConfig()) throw new Error("只有总经理或管理员可以修改基础配置。"); await api("/api/config",{method:"PUT",body:JSON.stringify({config})}); }
 async function addRegion(){try{const v=$("newRegion").value.trim(); if(v&&!config.regions.includes(v)){config.regions.push(v); await saveConfig(); showToast("区域已保存。"); await loadAll();} $("newRegion").value="";}catch(e){showToast(e.message)}}
-async function addProductLine(){try{const name=prompt("请输入新的产品线/解决方案名称"); if(name&&!config.productLines[name]){config.productLines[name]=[]; await saveConfig(); showToast("产品线已保存。"); await loadAll();}}catch(e){showToast(e.message)}}
-async function addProductName(){try{const line=$("configProductLine").value, name=$("newProductName").value.trim(); if(line&&name&&!config.productLines[line].includes(name)){config.productLines[line].push(name); await saveConfig(); showToast("具体产品名已保存。"); await loadAll();} $("newProductName").value="";}catch(e){showToast(e.message)}}
+async function addProductLine(){
+  try{
+    const input = $("newProductLineName");
+    let name = input?.value?.trim();
+    if(!name){
+      name = prompt("请输入新的产品线/解决方案名称");
+    }
+    if(name && !config.productLines[name]){
+      config.productLines[name]=[];
+      await saveConfig();
+      if(input) input.value="";
+      showToast("产品线已保存。");
+      await loadAll();
+      if($("configProductLine")){
+        $("configProductLine").value = name;
+        renderProductConfig();
+      }
+    }else if(name){
+      showToast("该产品线已存在。");
+    }
+  }catch(e){showToast(e.message)}
+}
+async function addProductName(){
+  try{
+    const line=$("configProductLine")?.value;
+    const name=$("newProductName")?.value?.trim();
+    if(line&&name&&!config.productLines[line].includes(name)){
+      config.productLines[line].push(name);
+      await saveConfig();
+      showToast("具体产品名已保存。");
+      $("newProductName").value="";
+      await loadAll();
+      if($("configProductLine")){
+        $("configProductLine").value = line;
+        renderProductConfig();
+      }
+    }else if(name){
+      showToast("该产品名已存在。");
+    }
+  }catch(e){showToast(e.message)}
+}
+
+async function renameProductLine(){
+  try{
+    if(!canEditConfig()) throw new Error("只有总经理或管理员可以修改基础配置。");
+    const oldName = $("configProductLine")?.value || "";
+    const newName = $("editProductLineName")?.value?.trim() || "";
+    if(!oldName){ showToast("请先选择要修改的产品线。"); return; }
+    if(!newName){ showToast("产品线名称不能为空。"); return; }
+    if(oldName === newName){ showToast("产品线名称未变化。"); return; }
+    if(config.productLines[newName]){ showToast("新的产品线名称已存在。"); return; }
+
+    config.productLines[newName] = config.productLines[oldName] || [];
+    delete config.productLines[oldName];
+    await saveConfig();
+
+    const affected = projects.filter(p => p.productLine === oldName);
+    for(const p of affected){
+      await api("/api/projects",{method:"PUT",body:JSON.stringify({...p, productLine:newName})});
+    }
+
+    showToast(affected.length ? `产品线已修改，并同步更新 ${affected.length} 个项目。` : "产品线已修改。");
+    await loadAll();
+    if($("configProductLine")){
+      $("configProductLine").value = newName;
+      renderProductConfig();
+    }
+  }catch(e){showToast(e.message)}
+}
+
+async function deleteProductLine(){
+  try{
+    if(!canEditConfig()) throw new Error("只有总经理或管理员可以修改基础配置。");
+    const line = $("configProductLine")?.value || "";
+    if(!line){ showToast("请先选择要删除的产品线。"); return; }
+
+    const usedCount = projects.filter(p => p.productLine === line).length;
+    const products = config.productLines[line] || [];
+    const msg = usedCount
+      ? `该产品线已有 ${usedCount} 个项目在使用。建议先重命名或调整项目后再删除。仍要删除吗？`
+      : `确认删除产品线“${line}”及其 ${products.length} 个具体产品名吗？`;
+    if(!confirm(msg)) return;
+
+    delete config.productLines[line];
+    await saveConfig();
+
+    showToast("产品线已删除。");
+    await loadAll();
+  }catch(e){showToast(e.message)}
+}
+
+async function renameProductName(){
+  try{
+    if(!canEditConfig()) throw new Error("只有总经理或管理员可以修改基础配置。");
+    const line = $("configProductLine")?.value || "";
+    const oldName = $("configProductName")?.value || "";
+    const newName = $("editProductName")?.value?.trim() || "";
+
+    if(!line){ showToast("请先选择产品线。"); return; }
+    if(!oldName){ showToast("请先选择要修改的具体产品名。"); return; }
+    if(!newName){ showToast("具体产品名不能为空。"); return; }
+    if(oldName === newName){ showToast("具体产品名未变化。"); return; }
+    if((config.productLines[line] || []).includes(newName)){ showToast("新的具体产品名已存在。"); return; }
+
+    config.productLines[line] = (config.productLines[line] || []).map(x => x === oldName ? newName : x);
+    await saveConfig();
+
+    const affected = projects.filter(p => p.productLine === line && p.productName === oldName);
+    for(const p of affected){
+      await api("/api/projects",{method:"PUT",body:JSON.stringify({...p, productName:newName})});
+    }
+
+    showToast(affected.length ? `产品名已修改，并同步更新 ${affected.length} 个项目。` : "产品名已修改。");
+    await loadAll();
+    if($("configProductLine")){
+      $("configProductLine").value = line;
+      renderProductConfig();
+      if($("configProductName")) $("configProductName").value = newName;
+      if($("editProductName")) $("editProductName").value = newName;
+    }
+  }catch(e){showToast(e.message)}
+}
+
+async function deleteProductName(){
+  try{
+    if(!canEditConfig()) throw new Error("只有总经理或管理员可以修改基础配置。");
+    const line = $("configProductLine")?.value || "";
+    const name = $("configProductName")?.value || "";
+
+    if(!line || !name){ showToast("请先选择要删除的具体产品名。"); return; }
+
+    const usedCount = projects.filter(p => p.productLine === line && p.productName === name).length;
+    const msg = usedCount
+      ? `该产品名已有 ${usedCount} 个项目在使用。删除后不会自动清空历史项目，但后续下拉不再出现。仍要删除吗？`
+      : `确认删除具体产品名“${name}”吗？`;
+    if(!confirm(msg)) return;
+
+    config.productLines[line] = (config.productLines[line] || []).filter(x => x !== name);
+    await saveConfig();
+
+    showToast("具体产品名已删除。");
+    await loadAll();
+    if($("configProductLine")){
+      $("configProductLine").value = line;
+      renderProductConfig();
+    }
+  }catch(e){showToast(e.message)}
+}
+
 async function removeRegion(name){try{config.regions=config.regions.filter(x=>x!==name); await saveConfig(); await loadAll();}catch(e){showToast(e.message)}}
-async function removeProduct(name){try{const line=$("configProductLine").value; config.productLines[line]=(config.productLines[line]||[]).filter(x=>x!==name); await saveConfig(); await loadAll();}catch(e){showToast(e.message)}}
+async function removeProduct(name){
+  try{
+    const line=$("configProductLine")?.value;
+    if(!line || !name) return;
+    const usedCount = projects.filter(p => p.productLine === line && p.productName === name).length;
+    const msg = usedCount
+      ? `该产品名已有 ${usedCount} 个项目在使用。删除后不会自动清空历史项目，但后续下拉不再出现。仍要删除吗？`
+      : `确认删除具体产品名“${name}”吗？`;
+    if(!confirm(msg)) return;
+    config.productLines[line]=(config.productLines[line]||[]).filter(x=>x!==name);
+    await saveConfig();
+    await loadAll();
+    if($("configProductLine")){
+      $("configProductLine").value = line;
+      renderProductConfig();
+    }
+  }catch(e){showToast(e.message)}
+}
 function initControls(){
   fillSelect("filterRegion",config.regions,"全部区域"); fillSelect("filterProductLine",Object.keys(config.productLines||{}),"全部产品线"); fillSelect("filterStage",config.stages,"全部阶段"); fillSelect("filterOwner",users.map(u=>({value:u.id,label:u.name})),"全部负责人"); fillSelect("filterRisk",config.risks,"全部风险");
   fillSelect("f_ownerUserId",users.map(u=>({value:u.id,label:`${u.name}（${u.role==='sales'?'销售':u.role==='general_manager'?'总经理':'管理员'}）`}))); $("f_ownerUserId").disabled = !canSeeAll();
@@ -380,17 +800,19 @@ function collectProject(){return {id:val("f_id"),ownerUserId:val("f_ownerUserId"
 async function saveProject(){try{const p=collectProject(); if(!p.company || !p.productLine || !p.productName){showToast("请至少填写：客户单位名称、产品线/解决方案、具体产品名。"); return;} if(p.win < 0 || p.win > 1){showToast("商机赢率请填写 0 到 1 之间的小数，例如 0.50。"); return;} if(p.id){await api("/api/projects",{method:"PUT",body:JSON.stringify(p)});}else{await api("/api/projects",{method:"POST",body:JSON.stringify(p)});} closeDrawer(); showToast("项目已保存。"); await loadAll();}catch(e){showToast(e.message)}}
 async function deleteProject(id){if(!confirm("确认删除该项目？"))return; try{await api(`/api/projects?id=${encodeURIComponent(id)}`,{method:"DELETE"}); showToast("项目已删除。"); await loadAll();}catch(e){showToast(e.message)}}
 function val(id){return $(id)?.value||""}
-async function exportJSON(){try{const data=await api("/api/export"); const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json;charset=utf-8"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`客户项目管理系统_${scope==='all'?'全量':'本人'}数据备份.json`; a.click(); URL.revokeObjectURL(a.href);}catch(e){showToast(e.message)}}
+async function exportJSON(){
+  await exportExcel();
+}
 function renderAll(){renderDashboard(); renderSalesStats(); renderProjects(); renderKeyProjects(); renderFunnel(); renderSettings(); renderProfile();}
 function showToast(msg){const el=$("toast"); el.textContent=msg; el.classList.add("show"); setTimeout(()=>el.classList.remove("show"),3200)}
 function bind(){
   $("loginBtn").addEventListener("click", login);
   $("loginPassword").addEventListener("keydown", e=>{if(e.key==="Enter")login();});
   $("logoutBtn").addEventListener("click", logout);
-  document.querySelectorAll(".nav button").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active")); btn.classList.add("active"); const id=btn.dataset.page; document.querySelectorAll(".page").forEach(p=>p.classList.remove("active")); $(id).classList.add("active"); $("pageTitle").textContent=pageMeta[id][0]; $("pageDesc").textContent=pageMeta[id][1]; renderAll();}));
+  document.querySelectorAll(".nav button").forEach(btn=>btn.addEventListener("click",()=>{const id=btn.dataset.page; if(!canSeeAll() && id==="dashboard"){setActivePage("projects"); return;} setActivePage(id); renderAll();}));
   $("refreshBtn").addEventListener("click",loadAll); $("exportBtn").addEventListener("click",exportJSON); $("newBtn").addEventListener("click",()=>openDrawer()); if($("saveProfileBtn")) $("saveProfileBtn").addEventListener("click",saveProfile); if($("changePasswordBtn")) $("changePasswordBtn").addEventListener("click",changePassword); $("closeDrawerBtn").addEventListener("click",closeDrawer); $("cancelProjectBtn").addEventListener("click",closeDrawer); $("saveProjectBtn").addEventListener("click",saveProject); $("f_productLine").addEventListener("change",syncProductOptions); $("f_stage").addEventListener("change",()=>syncWinFromStage(true)); $("resetFilterBtn").addEventListener("click",clearFilters);
   ["searchText","filterRegion","filterProductLine","filterStage","filterOwner","filterRisk"].forEach(id=>{ $(id).addEventListener("input",renderProjects); $(id).addEventListener("change",renderProjects); });
-  $("addRegionBtn").addEventListener("click",addRegion); $("addProductLineBtn").addEventListener("click",addProductLine); $("addProductNameBtn").addEventListener("click",addProductName); $("configProductLine").addEventListener("change",renderProductConfig);
+  $("addRegionBtn").addEventListener("click",addRegion); $("addProductLineBtn").addEventListener("click",addProductLine); $("addProductNameBtn").addEventListener("click",addProductName); $("renameProductLineBtn").addEventListener("click",renameProductLine); $("deleteProductLineBtn").addEventListener("click",deleteProductLine); $("renameProductNameBtn").addEventListener("click",renameProductName); $("deleteProductNameBtn").addEventListener("click",deleteProductName); $("configProductLine").addEventListener("change",renderProductConfig); $("configProductName").addEventListener("change",()=>{if($("editProductName")) $("editProductName").value = $("configProductName").value || "";});
   document.body.addEventListener("click",(e)=>{if(e.target.dataset.edit)openDrawer(projects.find(p=>p.id===e.target.dataset.edit)); if(e.target.dataset.del)deleteProject(e.target.dataset.del); if(e.target.dataset.removeRegion)removeRegion(e.target.dataset.removeRegion); if(e.target.dataset.removeProduct)removeProduct(e.target.dataset.removeProduct);});
 }
 async function start(){

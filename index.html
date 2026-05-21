@@ -32,7 +32,7 @@
     </div>
     <div class="nav">
       <div class="nav-title">业务模块</div>
-      <button class="active" data-page="dashboard">📊 总经理驾驶舱</button>
+      <button class="active" data-page="dashboard" data-manager-only="true">📊 总经理驾驶舱</button>
       <button data-page="salesstats">📈 销售统计</button>
       <button data-page="projects">📋 项目明细台账</button>
       <button data-page="keyprojects">⭐ 重点项目推进</button>
@@ -58,7 +58,7 @@
       </div>
       <div class="top-actions">
         <button class="btn" id="refreshBtn">刷新</button>
-        <button class="btn" id="exportBtn">导出</button>
+        <button class="btn" id="exportBtn">导出EXCEL</button>
         <button class="btn primary" id="newBtn">新增项目</button>
         <button class="btn danger" id="logoutBtn">退出</button>
       </div>
@@ -66,7 +66,7 @@
 
     <div class="notice" id="statusNotice">正在连接云端数据库...</div>
 
-    <section id="dashboard" class="page active">
+    <section id="dashboard" class="page active" data-manager-only="true">
       <div class="grid kpis">
         <div class="card kpi"><div class="label">可见项目数</div><div class="value" id="kpiCount">0</div><div class="hint" id="scopeHint">按账号权限过滤</div></div>
         <div class="card kpi"><div class="label">预计成交金额</div><div class="value" id="kpiAmount">0</div><div class="hint">项目预计合同额</div></div>
@@ -207,14 +207,37 @@
           <div class="inline-form"><input id="newRegion" placeholder="新增区域，例如：京津冀、华南、东北" /><button class="btn primary" id="addRegionBtn">添加</button></div>
         </div>
         <div class="card">
-          <div class="section-title"><h3>产品线/解决方案 与 具体产品名</h3><span>具体产品名跟随产品线联动</span></div>
-          <div class="form-grid compact">
-            <select id="configProductLine"></select>
-            <input id="newProductName" class="span2" placeholder="新增具体产品名" />
-            <button class="btn primary" id="addProductNameBtn">添加产品名</button>
-            <button class="btn" id="addProductLineBtn">新增产品线</button>
+          <div class="section-title"><h3>产品线/解决方案 与 具体产品名</h3><span>支持新增、重命名、删除；具体产品名跟随产品线联动</span></div>
+
+          <div class="config-panel">
+            <div class="config-subtitle">产品线 / 解决方案</div>
+            <div class="form-grid config-actions">
+              <select id="configProductLine"></select>
+              <input id="editProductLineName" placeholder="修改当前产品线名称" />
+              <button class="btn primary" id="renameProductLineBtn">保存修改</button>
+              <button class="btn danger" id="deleteProductLineBtn">删除产品线</button>
+            </div>
+            <div class="inline-form">
+              <input id="newProductLineName" placeholder="新增产品线/解决方案，例如：智慧实验室运维解决方案" />
+              <button class="btn" id="addProductLineBtn">新增产品线</button>
+            </div>
+            <p class="config-help">修改产品线名称后，系统会同步更新当前可见项目中使用该产品线的记录；删除前请确认该产品线下没有需要保留的产品。</p>
           </div>
-          <div class="mt-sm" id="productPills"></div>
+
+          <div class="config-panel mt-sm">
+            <div class="config-subtitle">当前产品线下的具体产品名</div>
+            <div class="form-grid config-actions">
+              <select id="configProductName"></select>
+              <input id="editProductName" placeholder="修改当前具体产品名" />
+              <button class="btn primary" id="renameProductNameBtn">保存修改</button>
+              <button class="btn danger" id="deleteProductNameBtn">删除产品名</button>
+            </div>
+            <div class="inline-form">
+              <input id="newProductName" placeholder="新增具体产品名" />
+              <button class="btn" id="addProductNameBtn">添加产品名</button>
+            </div>
+            <div class="mt-sm" id="productPills"></div>
+          </div>
         </div>
       </div>
     </section>

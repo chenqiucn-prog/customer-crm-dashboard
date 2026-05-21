@@ -1,8 +1,8 @@
 {
   "name": "customer-crm-netlify-supabase-auth-rls-no-service-key",
-  "version": "2.4.0",
+  "version": "2.7.0",
   "private": true,
-  "description": "客户项目管理暨总经理驾驶舱 - RLS权限版，个人资料与密码修改版",
+  "description": "客户项目管理暨总经理驾驶舱 - RLS权限版，Excel导出版",
   "type": "module",
   "scripts": {
     "dev": "netlify dev",
