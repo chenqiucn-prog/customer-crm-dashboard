@@ -583,7 +583,7 @@ function renderProjects(){
 }
 function renderKeyProjects(){const tbody=$("keyRows"); if(!tbody)return; const score={S:4,A:3,B:2,C:1}; const rows=[...projects].sort((a,b)=>(score[b.priority]||0)-(score[a.priority]||0)||weight(b)-weight(a)||Number(b.amount||0)-Number(a.amount||0)).slice(0,10); tbody.innerHTML=rows.length?rows.map((p,i)=>`<tr><td>${i+1}</td><td><strong>${esc(p.company)}</strong></td><td>${esc(p.owner)}</td><td>${esc(p.productLine)}</td><td>${esc(p.productName)}</td><td><span class="tag purple">${esc(p.priority)}</span></td><td>${esc(p.stage)}</td><td>${money(p.amount)}</td><td>${money(weight(p))}</td><td>${esc(p.next||"")}</td><td><span class="tag ${p.risk==='高'?'red':p.risk==='中'?'orange':'green'}">${esc(p.risk)}</span></td><td>${p.boss==="是"?'<span class="tag red">是</span>':'否'}</td></tr>`).join(""):`<tr><td colspan="12" class="empty">暂无重点项目</td></tr>`;}
 function renderFunnel(){const amounts={}; (config.stages||[]).forEach(s=>amounts[s.name]=0); projects.forEach(p=>amounts[p.stage]=(amounts[p.stage]||0)+weight(p)); renderBars("funnelBars",amounts); $("stageTips").innerHTML=(config.stages||[]).map(s=>`<div style="border-bottom:1px solid #edf2f7;padding:10px 0"><strong>${esc(s.name)}</strong><span class="tag" style="margin-left:8px">${Math.round(s.win*100)}%</span><div style="color:#64748b;font-size:13px;margin-top:4px">${esc(s.tip)}</div></div>`).join("");}
-function renderSettings(){ $("regionPills").innerHTML=(config.regions||[]).map(x=>`<span class="pill">${esc(x)}${canEditConfig()?`<button data-remove-region="${esc(x)}">×</button>`:""}</span>`).join(""); fillSelect("configProductLine",Object.keys(config.productLines||{})); renderProductConfig();}
+function renderSettings(){ $("regionPills").innerHTML=(config.regions||[]).map(x=>`<span class="pill">${esc(x) renderTeamConfig();}${canEditConfig()?`<button data-remove-region="${esc(x)}">×</button>`:""}</span>`).join(""); fillSelect("configProductLine",Object.keys(config.productLines||{})); renderProductConfig();}
 function renderProductConfig(){
   const lines = Object.keys(config.productLines || {});
   const line = $("configProductLine")?.value || lines[0] || "";
@@ -609,6 +609,23 @@ function renderProductConfig(){
     $("productPills").innerHTML = `<div class="pill-list">${items.map(x=>`<span class="pill">${esc(x)}${canEditConfig()?`<button data-remove-product="${esc(x)}">×</button>`:""}</span>`).join("")}</div>`;
   }
 }
+
+function renderTeamConfig(){
+  const teams = config.teams || [];
+
+  if($("configTeam")){
+    fillSelect("configTeam", teams);
+  }
+
+  const selectedTeam = $("configTeam")?.value || teams[0] || "";
+  if($("configTeam")) $("configTeam").value = selectedTeam;
+  if($("editTeamName")) $("editTeamName").value = selectedTeam || "";
+
+  if($("teamPills")){
+    $("teamPills").innerHTML = `<div class="pill-list">${teams.map(x=>`<span class="pill">${esc(x)}${canEditConfig()?`<button data-remove-team="${esc(x)}">×</button>`:""}</span>`).join("")}</div>`;
+  }
+}
+
 async function saveConfig(){ if(!canEditConfig()) throw new Error("只有总经理或管理员可以修改基础配置。"); await api("/api/config",{method:"PUT",body:JSON.stringify({config})}); }
 async function addRegion(){try{const v=$("newRegion").value.trim(); if(v&&!config.regions.includes(v)){config.regions.push(v); await saveConfig(); showToast("区域已保存。"); await loadAll();} $("newRegion").value="";}catch(e){showToast(e.message)}}
 async function addProductLine(){
@@ -779,6 +796,94 @@ async function removeProduct(name){
     }
   }catch(e){showToast(e.message)}
 }
+
+async function addTeam(){
+  try{
+    if(!canEditConfig()) throw new Error("只有总经理或管理员可以修改基础配置。");
+    const name = $("newTeamName")?.value?.trim() || "";
+    if(!name){ showToast("请输入团队名称。"); return; }
+    config.teams = config.teams || [];
+    if(config.teams.includes(name)){ showToast("该团队已存在。"); return; }
+
+    config.teams.push(name);
+    await saveConfig();
+
+    $("newTeamName").value = "";
+    showToast("销售团队已新增。");
+    await loadAll();
+    if($("configTeam")){
+      $("configTeam").value = name;
+      renderTeamConfig();
+    }
+  }catch(e){showToast(e.message)}
+}
+
+async function renameTeam(){
+  try{
+    if(!canEditConfig()) throw new Error("只有总经理或管理员可以修改基础配置。");
+    const oldName = $("configTeam")?.value || "";
+    const newName = $("editTeamName")?.value?.trim() || "";
+    if(!oldName){ showToast("请先选择要修改的团队。"); return; }
+    if(!newName){ showToast("团队名称不能为空。"); return; }
+    if(oldName === newName){ showToast("团队名称未变化。"); return; }
+    if((config.teams || []).includes(newName)){ showToast("新的团队名称已存在。"); return; }
+
+    config.teams = (config.teams || []).map(x => x === oldName ? newName : x);
+    await saveConfig();
+
+    const affected = projects.filter(p => p.team === oldName);
+    for(const p of affected){
+      await api("/api/projects",{method:"PUT",body:JSON.stringify({...p, team:newName})});
+    }
+
+    showToast(affected.length ? `团队已修改，并同步更新 ${affected.length} 个项目。` : "团队已修改。");
+    await loadAll();
+    if($("configTeam")){
+      $("configTeam").value = newName;
+      renderTeamConfig();
+    }
+  }catch(e){showToast(e.message)}
+}
+
+async function deleteTeam(){
+  try{
+    if(!canEditConfig()) throw new Error("只有总经理或管理员可以修改基础配置。");
+    const team = $("configTeam")?.value || "";
+    if(!team){ showToast("请先选择要删除的团队。"); return; }
+
+    const usedCount = projects.filter(p => p.team === team).length;
+    const msg = usedCount
+      ? `该团队已有 ${usedCount} 个项目在使用。删除后不会自动清空历史项目，但新增项目下拉不再出现。仍要删除吗？`
+      : `确认删除团队“${team}”吗？`;
+    if(!confirm(msg)) return;
+
+    config.teams = (config.teams || []).filter(x => x !== team);
+    await saveConfig();
+
+    showToast("销售团队已删除。");
+    await loadAll();
+  }catch(e){showToast(e.message)}
+}
+
+async function removeTeam(name){
+  try{
+    if(!canEditConfig()) throw new Error("只有总经理或管理员可以修改基础配置。");
+    if(!name) return;
+
+    const usedCount = projects.filter(p => p.team === name).length;
+    const msg = usedCount
+      ? `该团队已有 ${usedCount} 个项目在使用。删除后不会自动清空历史项目，但新增项目下拉不再出现。仍要删除吗？`
+      : `确认删除团队“${name}”吗？`;
+    if(!confirm(msg)) return;
+
+    config.teams = (config.teams || []).filter(x => x !== name);
+    await saveConfig();
+
+    showToast("销售团队已删除。");
+    await loadAll();
+  }catch(e){showToast(e.message)}
+}
+
 function initControls(){
   fillSelect("filterRegion",config.regions,"全部区域"); fillSelect("filterProductLine",Object.keys(config.productLines||{}),"全部产品线"); fillSelect("filterStage",config.stages,"全部阶段"); fillSelect("filterOwner",users.map(u=>({value:u.id,label:u.name})),"全部负责人"); fillSelect("filterRisk",config.risks,"全部风险");
   fillSelect("f_ownerUserId",users.map(u=>({value:u.id,label:`${u.name}（${u.role==='sales'?'销售':u.role==='general_manager'?'总经理':'管理员'}）`}))); $("f_ownerUserId").disabled = !canSeeAll();
@@ -812,8 +917,8 @@ function bind(){
   document.querySelectorAll(".nav button").forEach(btn=>btn.addEventListener("click",()=>{const id=btn.dataset.page; if(!canSeeAll() && id==="dashboard"){setActivePage("projects"); return;} setActivePage(id); renderAll();}));
   $("refreshBtn").addEventListener("click",loadAll); $("exportBtn").addEventListener("click",exportJSON); $("newBtn").addEventListener("click",()=>openDrawer()); if($("saveProfileBtn")) $("saveProfileBtn").addEventListener("click",saveProfile); if($("changePasswordBtn")) $("changePasswordBtn").addEventListener("click",changePassword); $("closeDrawerBtn").addEventListener("click",closeDrawer); $("cancelProjectBtn").addEventListener("click",closeDrawer); $("saveProjectBtn").addEventListener("click",saveProject); $("f_productLine").addEventListener("change",syncProductOptions); $("f_stage").addEventListener("change",()=>syncWinFromStage(true)); $("resetFilterBtn").addEventListener("click",clearFilters);
   ["searchText","filterRegion","filterProductLine","filterStage","filterOwner","filterRisk"].forEach(id=>{ $(id).addEventListener("input",renderProjects); $(id).addEventListener("change",renderProjects); });
-  $("addRegionBtn").addEventListener("click",addRegion); $("addProductLineBtn").addEventListener("click",addProductLine); $("addProductNameBtn").addEventListener("click",addProductName); $("renameProductLineBtn").addEventListener("click",renameProductLine); $("deleteProductLineBtn").addEventListener("click",deleteProductLine); $("renameProductNameBtn").addEventListener("click",renameProductName); $("deleteProductNameBtn").addEventListener("click",deleteProductName); $("configProductLine").addEventListener("change",renderProductConfig); $("configProductName").addEventListener("change",()=>{if($("editProductName")) $("editProductName").value = $("configProductName").value || "";});
-  document.body.addEventListener("click",(e)=>{if(e.target.dataset.edit)openDrawer(projects.find(p=>p.id===e.target.dataset.edit)); if(e.target.dataset.del)deleteProject(e.target.dataset.del); if(e.target.dataset.removeRegion)removeRegion(e.target.dataset.removeRegion); if(e.target.dataset.removeProduct)removeProduct(e.target.dataset.removeProduct);});
+  $("addRegionBtn").addEventListener("click",addRegion); $("addProductLineBtn").addEventListener("click",addProductLine); $("addProductNameBtn").addEventListener("click",addProductName); $("renameProductLineBtn").addEventListener("click",renameProductLine); $("deleteProductLineBtn").addEventListener("click",deleteProductLine); $("renameProductNameBtn").addEventListener("click",renameProductName); $("deleteProductNameBtn").addEventListener("click",deleteProductName); $("configProductLine").addEventListener("change",renderProductConfig); if($("configTeam")) $("configTeam").addEventListener("change",()=>{if($("editTeamName")) $("editTeamName").value = $("configTeam").value || "";}); if($("addTeamBtn")) $("addTeamBtn").addEventListener("click",addTeam); if($("renameTeamBtn")) $("renameTeamBtn").addEventListener("click",renameTeam); if($("deleteTeamBtn")) $("deleteTeamBtn").addEventListener("click",deleteTeam); $("configProductName").addEventListener("change",()=>{if($("editProductName")) $("editProductName").value = $("configProductName").value || "";});
+  document.body.addEventListener("click",(e)=>{if(e.target.dataset.edit)openDrawer(projects.find(p=>p.id===e.target.dataset.edit)); if(e.target.dataset.del)deleteProject(e.target.dataset.del); if(e.target.dataset.removeRegion)removeRegion(e.target.dataset.removeRegion); if(e.target.dataset.removeProduct)removeProduct(e.target.dataset.removeProduct); if(e.target.dataset.removeTeam)removeTeam(e.target.dataset.removeTeam);});
 }
 async function start(){
   bind();

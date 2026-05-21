@@ -240,6 +240,28 @@
           </div>
         </div>
       </div>
+
+      <div class="card mt">
+        <div class="section-title"><h3>销售团队配置</h3><span>支持新增、重命名、删除；用于项目归属、人员分组和销售统计</span></div>
+
+        <div class="config-panel">
+          <div class="config-subtitle">团队名称维护</div>
+          <div class="form-grid team-config-actions">
+            <select id="configTeam"></select>
+            <input id="editTeamName" placeholder="修改当前团队名称，例如：华北销售组" />
+            <button class="btn primary" id="renameTeamBtn">保存修改</button>
+            <button class="btn danger" id="deleteTeamBtn">删除团队</button>
+          </div>
+          <div class="inline-form">
+            <input id="newTeamName" placeholder="新增销售团队，例如：北京高校客户组 / 医疗行业大客户组" />
+            <button class="btn" id="addTeamBtn">新增团队</button>
+          </div>
+          <p class="config-help">修改团队名称后，系统会同步更新当前可见项目中使用该团队的项目记录。用户账号本身的团队归属仍建议由管理员在 app_users 表维护。</p>
+        </div>
+
+        <div class="mt-sm" id="teamPills"></div>
+      </div>
+
     </section>
 
 
