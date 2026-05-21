@@ -90,7 +90,11 @@ export function profileToUser(row) {
     name: row.name,
     role: row.role,
     enabled: row.enabled,
-    teamName: row.team_name || ""
+    teamName: row.team_name || "",
+    phone: row.phone || "",
+    title: row.title || "",
+    department: row.department || "",
+    note: row.note || ""
   };
 }
 

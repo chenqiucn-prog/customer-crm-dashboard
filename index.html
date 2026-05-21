@@ -33,10 +33,12 @@
     <div class="nav">
       <div class="nav-title">业务模块</div>
       <button class="active" data-page="dashboard">📊 总经理驾驶舱</button>
+      <button data-page="salesstats">📈 销售统计</button>
       <button data-page="projects">📋 项目明细台账</button>
       <button data-page="keyprojects">⭐ 重点项目推进</button>
       <button data-page="funnel">🔻 销售漏斗分析</button>
       <button data-page="settings">⚙️ 基础配置</button>
+      <button data-page="profile">👤 个人资料</button>
       <div class="nav-title">系统设计</div>
       <button data-page="architecture">🧩 权限架构</button>
       <small>销售账号只能访问自己名下项目；总经理/管理员账号可访问全量项目。</small>
@@ -83,6 +85,73 @@
         <div class="card"><div class="section-title"><h3>风险与预警</h3><span>高风险、重点、需管理层支持</span></div><div id="riskList"></div></div>
       </div>
     </section>
+
+
+    <section id="salesstats" class="page">
+      <div class="notice">
+        统计口径：已成交金额按“销售阶段 = 合同/成交”统计；今年统计按项目创建时间或更新时间落在当前自然年统计。后续如需要更严格口径，可增加“成交日期 / 合同日期 / 回款日期”字段。
+      </div>
+
+      <div class="grid kpis">
+        <div class="card kpi"><div class="label">今年已成交金额</div><div class="value" id="statYearClosedAmount">0</div><div class="hint">本年合同/成交阶段项目</div></div>
+        <div class="card kpi"><div class="label">今年已成交项目数</div><div class="value" id="statYearClosedCount">0</div><div class="hint">本年成交项目数量</div></div>
+        <div class="card kpi"><div class="label">预计成交金额</div><div class="value" id="statPipelineAmount">0</div><div class="hint">当前可见项目预计金额</div></div>
+        <div class="card kpi"><div class="label">加权预测金额</div><div class="value" id="statWeightedAmount">0</div><div class="hint">金额 × 商机赢率</div></div>
+        <div class="card kpi"><div class="label">客户总数</div><div class="value" id="statCustomerCount">0</div><div class="hint">按客户单位去重</div></div>
+      </div>
+
+      <div class="grid kpis mt">
+        <div class="card kpi"><div class="label">今年新增客户</div><div class="value" id="statYearNewCustomers">0</div><div class="hint">本年创建项目对应客户</div></div>
+        <div class="card kpi"><div class="label">高优先级项目</div><div class="value" id="statHighPriorityCount">0</div><div class="hint">优先级 S / A</div></div>
+        <div class="card kpi"><div class="label">高风险项目</div><div class="value" id="statHighRiskCount">0</div><div class="hint">风险等级 = 高</div></div>
+        <div class="card kpi"><div class="label">需总经理介入</div><div class="value" id="statNeedBossCount">0</div><div class="hint">需要高层支持</div></div>
+        <div class="card kpi"><div class="label">平均项目金额</div><div class="value" id="statAvgAmount">0</div><div class="hint">预计成交金额均值</div></div>
+      </div>
+
+      <div class="grid two mt">
+        <div class="card">
+          <div class="section-title"><h3>按销售负责人统计</h3><span>项目数 / 客户数 / 预计金额 / 已成交金额</span></div>
+          <div class="table-wrap compact-table">
+            <table>
+              <thead>
+                <tr><th>销售负责人</th><th>项目数</th><th>客户数</th><th>预计成交金额</th><th>已成交金额</th><th>加权预测</th></tr>
+              </thead>
+              <tbody id="ownerStatsRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-title"><h3>按客户类型统计</h3><span>客户分类分布</span></div>
+          <div id="categoryStatsBars"></div>
+        </div>
+      </div>
+
+      <div class="grid two mt">
+        <div class="card">
+          <div class="section-title"><h3>按产品线统计</h3><span>机会金额与成交金额</span></div>
+          <div class="table-wrap compact-table">
+            <table>
+              <thead>
+                <tr><th>产品线 / 解决方案</th><th>项目数</th><th>预计成交金额</th><th>已成交金额</th><th>加权预测</th></tr>
+              </thead>
+              <tbody id="productStatsRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-title"><h3>今年成交TOP客户</h3><span>按已成交金额排序</span></div>
+          <div class="table-wrap compact-table">
+            <table>
+              <thead>
+                <tr><th>客户单位</th><th>负责人</th><th>产品线</th><th>已成交金额</th><th>更新时间</th></tr>
+              </thead>
+              <tbody id="closedTopRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
 
     <section id="projects" class="page">
       <div class="card">
@@ -149,6 +218,98 @@
         </div>
       </div>
     </section>
+
+
+    <section id="profile" class="page">
+      <div class="notice">
+        当前页面用于维护个人资料和修改登录密码。角色、账号启用状态和项目可见范围由系统管理员在 Supabase 中配置，普通用户不能自行修改。
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <div class="section-title"><h3>个人信息</h3><span>用于销售项目归属、负责人展示和团队管理</span></div>
+          <div class="profile-form">
+            <label class="field">
+              <span>登录邮箱</span>
+              <input id="profileEmail" disabled />
+              <em>邮箱来自 Supabase Auth，如需更换邮箱建议由管理员处理。</em>
+            </label>
+
+            <label class="field">
+              <span>姓名 / 显示名称 <b>*</b></span>
+              <input id="profileName" placeholder="例如：陈秋 / 销售A" />
+              <em>会显示在项目负责人、销售统计和左侧账号信息中。</em>
+            </label>
+
+            <label class="field">
+              <span>角色</span>
+              <input id="profileRole" disabled />
+              <em>sales 只能看自己项目；general_manager/admin 可看全量项目。</em>
+            </label>
+
+            <label class="field">
+              <span>团队</span>
+              <input id="profileTeam" disabled />
+              <em>团队字段由管理员维护，用于销售分组统计。</em>
+            </label>
+
+            <label class="field">
+              <span>手机号</span>
+              <input id="profilePhone" placeholder="例如：13800000000" />
+              <em>用于内部沟通，不对外公开展示。</em>
+            </label>
+
+            <label class="field">
+              <span>职务</span>
+              <input id="profileTitle" placeholder="例如：销售经理 / 产品经理 / 总经理" />
+              <em>用于内部权限和人员身份识别。</em>
+            </label>
+
+            <label class="field">
+              <span>部门</span>
+              <input id="profileDepartment" placeholder="例如：华北销售部 / 产品部 / 管理层" />
+              <em>用于后续组织架构扩展。</em>
+            </label>
+
+            <label class="field">
+              <span>个人备注</span>
+              <textarea id="profileNote" placeholder="例如：负责北京高校客户、重点跟进科研仪器项目"></textarea>
+              <em>可填写负责区域、重点客户或内部说明。</em>
+            </label>
+
+            <div class="form-actions">
+              <button class="btn primary" id="saveProfileBtn" type="button">保存个人资料</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title"><h3>修改登录密码</h3><span>修改后下次登录使用新密码</span></div>
+          <div class="profile-form">
+            <label class="field">
+              <span>新密码</span>
+              <input id="newPassword" type="password" placeholder="至少 6 位，建议包含字母、数字和符号" />
+              <em>Supabase 默认要求密码至少 6 位；正式使用建议 12 位以上。</em>
+            </label>
+
+            <label class="field">
+              <span>再次输入新密码</span>
+              <input id="confirmPassword" type="password" placeholder="再次输入新密码" />
+              <em>两次输入必须一致。</em>
+            </label>
+
+            <div class="notice password-notice">
+              密码修改使用当前登录会话调用 Supabase Auth。修改成功后，建议退出并用新密码重新登录验证。
+            </div>
+
+            <div class="form-actions">
+              <button class="btn primary" id="changePasswordBtn" type="button">修改密码</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
 
     <section id="architecture" class="page">
       <div class="grid three">

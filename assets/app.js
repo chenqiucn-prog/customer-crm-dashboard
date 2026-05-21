@@ -36,10 +36,12 @@ const DEFAULT_CONFIG = {
 const $ = id => document.getElementById(id);
 const pageMeta = {
   dashboard:["总经理驾驶舱","集中查看销售规模、加权预测、重点项目、区域与产品线机会分布。"],
+  salesstats:["销售统计","统计今年已成交金额、预计成交金额、客户数量、销售负责人和产品线贡献。"],
   projects:["项目明细台账","用于销售日常录入、查询、筛选、更新阶段和维护下一步动作。"],
   keyprojects:["重点项目推进","面向总经理和销售总监，突出高金额、高优先级、需管理层介入项目。"],
   funnel:["销售漏斗分析","按标准销售阶段统计项目数量、金额和加权预测，辅助例会复盘。"],
   settings:["基础配置","区域、产品线、具体产品名、销售阶段、人员和风险字段均可配置。"],
+  profile:["个人资料","维护个人信息、联系方式和登录密码。"],
   architecture:["权限架构","销售看自己项目，总经理/管理员看全量项目。"]
 };
 
@@ -140,6 +142,39 @@ function weight(p){return Number(p.amount||0)*Number(p.win||0)}
 function sum(arr,field){return arr.reduce((a,b)=>a+Number(b[field]||0),0)}
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]))}
 function groupBy(arr,key,valueFn){const out={}; arr.forEach(x=>{const k=(typeof key==="function"?key(x):x[key])||"未填写"; out[k]=(out[k]||0)+(valueFn?valueFn(x):1)}); return out;}
+function isClosedProject(p){ return p.stage === "合同/成交"; }
+function projectDate(p){
+  const raw = p.updatedAt || p.createdAt || "";
+  const d = raw ? new Date(raw) : null;
+  return d && !Number.isNaN(d.getTime()) ? d : null;
+}
+function isThisYearProject(p){
+  const d = projectDate(p);
+  return !!d && d.getFullYear() === new Date().getFullYear();
+}
+function uniqueCount(arr, field){
+  return new Set(arr.map(x => (x[field] || "").trim()).filter(Boolean)).size;
+}
+function dateText(raw){
+  if(!raw) return "";
+  const d = new Date(raw);
+  if(Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0,10);
+}
+function groupedStats(arr, keyFn){
+  const map = {};
+  arr.forEach(p => {
+    const key = keyFn(p) || "未填写";
+    if(!map[key]) map[key] = { key, projects:0, customers:new Set(), amount:0, closed:0, weighted:0 };
+    map[key].projects += 1;
+    if(p.company) map[key].customers.add(p.company.trim());
+    map[key].amount += Number(p.amount || 0);
+    map[key].weighted += weight(p);
+    if(isClosedProject(p)) map[key].closed += Number(p.amount || 0);
+  });
+  return Object.values(map).map(x => ({...x, customerCount:x.customers.size})).sort((a,b)=>b.amount-a.amount);
+}
+
 function fillSelect(id, arr, placeholder, valueKey="value", labelKey="label"){
   const el=$(id); if(!el)return; const old=el.value;
   el.innerHTML=placeholder?`<option value="">${placeholder}</option>`:"";
@@ -156,6 +191,135 @@ function fillSelect(id, arr, placeholder, valueKey="value", labelKey="label"){
   if(old && [...el.options].some(o=>o.value===old)) el.value=old;
 }
 function renderBars(id,data,cls=""){const el=$(id); if(!el)return; const entries=Object.entries(data).sort((a,b)=>b[1]-a[1]); const max=Math.max(...entries.map(x=>x[1]),1); el.innerHTML=entries.length?entries.map(([k,v])=>`<div class="bar-row"><div class="bar-label" title="${esc(k)}">${esc(k)}</div><div class="bar-bg"><div class="bar ${cls}" style="width:${Math.max(4,v/max*100)}%"></div></div><div class="bar-value">${money(v)}</div></div>`).join(""):`<div class="empty">暂无数据</div>`;}
+
+
+
+function renderProfile(){
+  if(!currentUser) return;
+  const roleMap = {sales:"销售账号", general_manager:"总经理", admin:"管理员"};
+  if($("profileEmail")) $("profileEmail").value = currentUser.email || "";
+  if($("profileName")) $("profileName").value = currentUser.name || "";
+  if($("profileRole")) $("profileRole").value = `${roleMap[currentUser.role] || currentUser.role}（${currentUser.role || ""}）`;
+  if($("profileTeam")) $("profileTeam").value = currentUser.teamName || "";
+  if($("profilePhone")) $("profilePhone").value = currentUser.phone || "";
+  if($("profileTitle")) $("profileTitle").value = currentUser.title || "";
+  if($("profileDepartment")) $("profileDepartment").value = currentUser.department || "";
+  if($("profileNote")) $("profileNote").value = currentUser.note || "";
+}
+
+async function saveProfile(){
+  try{
+    const payload = {
+      name: $("profileName").value.trim(),
+      phone: $("profilePhone").value.trim(),
+      title: $("profileTitle").value.trim(),
+      department: $("profileDepartment").value.trim(),
+      note: $("profileNote").value.trim()
+    };
+    if(!payload.name){
+      showToast("姓名 / 显示名称不能为空。");
+      return;
+    }
+    const res = await api("/api/me", { method:"PUT", body: JSON.stringify(payload) });
+    currentUser = res.user;
+    $("currentUserName").textContent = currentUser.name;
+    $("currentUserRole").textContent = roleLabel(currentUser.role);
+    $("currentUserEmail").textContent = currentUser.email;
+    renderProfile();
+    showToast("个人资料已保存。");
+    await loadAll();
+  }catch(e){
+    showToast(e.message);
+  }
+}
+
+async function changePassword(){
+  try{
+    const p1 = $("newPassword").value;
+    const p2 = $("confirmPassword").value;
+    if(!p1 || !p2){
+      showToast("请输入新密码并再次确认。");
+      return;
+    }
+    if(p1 !== p2){
+      showToast("两次输入的新密码不一致。");
+      return;
+    }
+    if(p1.length < 6){
+      showToast("新密码至少需要 6 位。");
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: p1 });
+    if(error) throw error;
+    $("newPassword").value = "";
+    $("confirmPassword").value = "";
+    showToast("密码已修改。建议退出后用新密码重新登录验证。");
+  }catch(e){
+    showToast(e.message || "密码修改失败。");
+  }
+}
+
+function renderSalesStats(){
+  const yearProjects = projects.filter(isThisYearProject);
+  const closedProjects = projects.filter(isClosedProject);
+  const yearClosed = projects.filter(p => isClosedProject(p) && isThisYearProject(p));
+
+  const setText = (id, value) => { if($(id)) $(id).textContent = value; };
+
+  setText("statYearClosedAmount", money(sum(yearClosed, "amount")));
+  setText("statYearClosedCount", yearClosed.length);
+  setText("statPipelineAmount", money(sum(projects, "amount")));
+  setText("statWeightedAmount", money(projects.reduce((a,b)=>a+weight(b),0)));
+  setText("statCustomerCount", uniqueCount(projects, "company"));
+  setText("statYearNewCustomers", uniqueCount(yearProjects, "company"));
+  setText("statHighPriorityCount", projects.filter(p=>["S","A"].includes(p.priority)).length);
+  setText("statHighRiskCount", projects.filter(p=>p.risk==="高").length);
+  setText("statNeedBossCount", projects.filter(p=>p.boss==="是").length);
+  setText("statAvgAmount", money(projects.length ? sum(projects, "amount") / projects.length : 0));
+
+  const ownerStats = groupedStats(projects, p => p.owner || "未分配");
+  const ownerBody = $("ownerStatsRows");
+  if(ownerBody){
+    ownerBody.innerHTML = ownerStats.length ? ownerStats.map(x=>`
+      <tr>
+        <td><strong>${esc(x.key)}</strong></td>
+        <td>${x.projects}</td>
+        <td>${x.customerCount}</td>
+        <td>${money(x.amount)}</td>
+        <td><span class="stat-positive">${money(x.closed)}</span></td>
+        <td>${money(x.weighted)}</td>
+      </tr>`).join("") : `<tr><td colspan="6" class="empty">暂无销售统计数据</td></tr>`;
+  }
+
+  const productStats = groupedStats(projects, p => p.productLine || "未填写");
+  const productBody = $("productStatsRows");
+  if(productBody){
+    productBody.innerHTML = productStats.length ? productStats.map(x=>`
+      <tr>
+        <td><strong>${esc(x.key)}</strong></td>
+        <td>${x.projects}</td>
+        <td>${money(x.amount)}</td>
+        <td><span class="stat-positive">${money(x.closed)}</span></td>
+        <td>${money(x.weighted)}</td>
+      </tr>`).join("") : `<tr><td colspan="5" class="empty">暂无产品线统计数据</td></tr>`;
+  }
+
+  const categoryAmounts = groupBy(projects, p => p.category || "未填写", p => Number(p.amount || 0));
+  renderBars("categoryStatsBars", categoryAmounts, "orange");
+
+  const closedTop = yearClosed.sort((a,b)=>Number(b.amount||0)-Number(a.amount||0)).slice(0,10);
+  const closedBody = $("closedTopRows");
+  if(closedBody){
+    closedBody.innerHTML = closedTop.length ? closedTop.map(p=>`
+      <tr>
+        <td><strong>${esc(p.company)}</strong></td>
+        <td>${esc(p.owner)}</td>
+        <td>${esc(p.productLine)}</td>
+        <td><span class="stat-positive">${money(p.amount)}</span></td>
+        <td class="stat-muted">${dateText(p.updatedAt || p.createdAt)}</td>
+      </tr>`).join("") : `<tr><td colspan="5" class="empty">今年暂无合同/成交项目</td></tr>`;
+  }
+}
 
 function renderDashboard(){
   $("kpiCount").textContent=projects.length;
@@ -217,14 +381,14 @@ async function saveProject(){try{const p=collectProject(); if(!p.company || !p.p
 async function deleteProject(id){if(!confirm("确认删除该项目？"))return; try{await api(`/api/projects?id=${encodeURIComponent(id)}`,{method:"DELETE"}); showToast("项目已删除。"); await loadAll();}catch(e){showToast(e.message)}}
 function val(id){return $(id)?.value||""}
 async function exportJSON(){try{const data=await api("/api/export"); const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json;charset=utf-8"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`客户项目管理系统_${scope==='all'?'全量':'本人'}数据备份.json`; a.click(); URL.revokeObjectURL(a.href);}catch(e){showToast(e.message)}}
-function renderAll(){renderDashboard(); renderProjects(); renderKeyProjects(); renderFunnel(); renderSettings();}
+function renderAll(){renderDashboard(); renderSalesStats(); renderProjects(); renderKeyProjects(); renderFunnel(); renderSettings(); renderProfile();}
 function showToast(msg){const el=$("toast"); el.textContent=msg; el.classList.add("show"); setTimeout(()=>el.classList.remove("show"),3200)}
 function bind(){
   $("loginBtn").addEventListener("click", login);
   $("loginPassword").addEventListener("keydown", e=>{if(e.key==="Enter")login();});
   $("logoutBtn").addEventListener("click", logout);
   document.querySelectorAll(".nav button").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active")); btn.classList.add("active"); const id=btn.dataset.page; document.querySelectorAll(".page").forEach(p=>p.classList.remove("active")); $(id).classList.add("active"); $("pageTitle").textContent=pageMeta[id][0]; $("pageDesc").textContent=pageMeta[id][1]; renderAll();}));
-  $("refreshBtn").addEventListener("click",loadAll); $("exportBtn").addEventListener("click",exportJSON); $("newBtn").addEventListener("click",()=>openDrawer()); $("closeDrawerBtn").addEventListener("click",closeDrawer); $("cancelProjectBtn").addEventListener("click",closeDrawer); $("saveProjectBtn").addEventListener("click",saveProject); $("f_productLine").addEventListener("change",syncProductOptions); $("f_stage").addEventListener("change",()=>syncWinFromStage(true)); $("resetFilterBtn").addEventListener("click",clearFilters);
+  $("refreshBtn").addEventListener("click",loadAll); $("exportBtn").addEventListener("click",exportJSON); $("newBtn").addEventListener("click",()=>openDrawer()); if($("saveProfileBtn")) $("saveProfileBtn").addEventListener("click",saveProfile); if($("changePasswordBtn")) $("changePasswordBtn").addEventListener("click",changePassword); $("closeDrawerBtn").addEventListener("click",closeDrawer); $("cancelProjectBtn").addEventListener("click",closeDrawer); $("saveProjectBtn").addEventListener("click",saveProject); $("f_productLine").addEventListener("change",syncProductOptions); $("f_stage").addEventListener("change",()=>syncWinFromStage(true)); $("resetFilterBtn").addEventListener("click",clearFilters);
   ["searchText","filterRegion","filterProductLine","filterStage","filterOwner","filterRisk"].forEach(id=>{ $(id).addEventListener("input",renderProjects); $(id).addEventListener("change",renderProjects); });
   $("addRegionBtn").addEventListener("click",addRegion); $("addProductLineBtn").addEventListener("click",addProductLine); $("addProductNameBtn").addEventListener("click",addProductName); $("configProductLine").addEventListener("change",renderProductConfig);
   document.body.addEventListener("click",(e)=>{if(e.target.dataset.edit)openDrawer(projects.find(p=>p.id===e.target.dataset.edit)); if(e.target.dataset.del)deleteProject(e.target.dataset.del); if(e.target.dataset.removeRegion)removeRegion(e.target.dataset.removeRegion); if(e.target.dataset.removeProduct)removeProduct(e.target.dataset.removeProduct);});
