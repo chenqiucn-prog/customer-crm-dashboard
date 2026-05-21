@@ -15,18 +15,23 @@ export function error(message, status = 400, detail = undefined) {
   return json({ ok: false, error: message, detail }, status);
 }
 
-export function adminClient() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("缺少 SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY。");
-  return createClient(url, key, { auth: { persistSession: false } });
-}
-
 export function publicConfig() {
   const url = process.env.SUPABASE_URL;
   const anonKey = process.env.SUPABASE_ANON_KEY;
   if (!url || !anonKey) throw new Error("缺少 SUPABASE_URL 或 SUPABASE_ANON_KEY。");
   return { supabaseUrl: url, supabaseAnonKey: anonKey };
+}
+
+export function userClient(accessToken) {
+  const { supabaseUrl, supabaseAnonKey } = publicConfig();
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false },
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    }
+  });
 }
 
 export function bearerToken(request) {
@@ -39,13 +44,15 @@ export async function getAuthContext(request) {
   const token = bearerToken(request);
   if (!token) throw Object.assign(new Error("未登录或登录已过期。"), { status: 401 });
 
-  const db = adminClient();
+  const db = userClient(token);
+
   const { data: userData, error: userError } = await db.auth.getUser(token);
   if (userError || !userData?.user) {
     throw Object.assign(new Error("登录状态无效，请重新登录。"), { status: 401 });
   }
 
   const user = userData.user;
+
   const { data: profile, error: profileError } = await db
     .from("app_users")
     .select("*")
@@ -157,8 +164,4 @@ export function validateProject(p) {
   }
   if (Number(p.win) < 0 || Number(p.win) > 1) return "赢率必须在 0 到 1 之间。";
   return "";
-}
-
-export function handleThrown(err) {
-  return error("服务器处理失败。", err.status || 500, err.message);
 }

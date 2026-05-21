@@ -1,8 +1,8 @@
 {
-  "name": "customer-crm-netlify-supabase-auth-roles",
-  "version": "2.0.0",
+  "name": "customer-crm-netlify-supabase-auth-rls-no-service-key",
+  "version": "2.1.0",
   "private": true,
-  "description": "客户项目管理暨总经理驾驶舱 - Supabase Auth 账号权限多人协作版",
+  "description": "客户项目管理暨总经理驾驶舱 - Supabase Auth + RLS 权限版，无需 service_role key",
   "type": "module",
   "scripts": {
     "dev": "netlify dev",

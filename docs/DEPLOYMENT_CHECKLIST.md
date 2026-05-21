@@ -1,13 +1,13 @@
-# 部署检查清单
+# 部署检查清单：RLS权限版
 
-- [ ] 已创建 Supabase 项目
-- [ ] 已执行 database/schema.sql
-- [ ] 已创建总经理 Auth 用户
-- [ ] 已创建销售 Auth 用户
-- [ ] 已在 app_users 表配置角色
+- [ ] Supabase 已执行 database/schema.sql
+- [ ] app_users 表已配置 chenqiu@qq.com 为 general_manager
+- [ ] app_users.enabled = true
 - [ ] Netlify 已配置 SUPABASE_URL
 - [ ] Netlify 已配置 SUPABASE_ANON_KEY
-- [ ] Netlify 已配置 SUPABASE_SERVICE_ROLE_KEY
-- [ ] 已部署 Netlify
-- [ ] 销售账号登录后只能看自己项目
-- [ ] 总经理账号登录后可以看全量项目
+- [ ] 本版本不再需要 SUPABASE_SERVICE_ROLE_KEY
+- [ ] 已用本版本覆盖 GitHub 仓库旧代码
+- [ ] 已重新 Deploy project without cache
+- [ ] 无痕窗口重新登录
+- [ ] 销售账号只能看到自己项目
+- [ ] 总经理账号能看到全量项目

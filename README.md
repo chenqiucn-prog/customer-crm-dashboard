@@ -1,191 +1,86 @@
-# 客户项目管理暨总经理驾驶舱 - 账号权限多人协作版
+# 客户项目管理暨总经理驾驶舱 - RLS权限版（无需 Service Role Key）
 
-## 1. 核心权限
+## 1. 版本说明
 
-本版本已实现：
+这一版取消了 `SUPABASE_SERVICE_ROLE_KEY` 依赖，用 **Supabase Auth + PostgreSQL RLS** 完成权限控制。
+
+适合解决以下问题：
+
+```txt
+/api/me 403
+该账号尚未在 app_users 表中配置角色，或已被停用
+```
+
+如果你的 `app_users` 表中已经有用户角色，但网页仍然 403，通常是 service role key 配置错误导致。本版不再需要该变量。
+
+## 2. 权限仍然保持
 
 | 角色 | 权限 |
 |---|---|
-| sales | 销售账号，只能查看、编辑、删除自己名下项目 |
-| general_manager | 总经理账号，可以查看和管理全部项目 |
-| admin | 管理员账号，可以查看和管理全部项目，并维护基础配置 |
+| sales | 只能查看、编辑、删除自己名下项目 |
+| general_manager | 总经理，可以查看和管理全部项目 |
+| admin | 管理员，可以查看全量项目，并维护基础配置 |
 
-## 2. 技术架构
-
-```txt
-Netlify 静态前端
-  ↓ Supabase Auth 邮箱密码登录
-Netlify Functions
-  ↓ 校验 access token + app_users 角色
-Supabase PostgreSQL
-  ↓ RLS 行级权限策略
-sales_projects.owner_user_id 控制项目可见范围
-```
-
-## 3. 部署步骤
-
-### 第一步：创建 Supabase 项目
-
-1. 登录 Supabase；
-2. 创建 Project；
-3. 进入 SQL Editor；
-4. 执行 `database/schema.sql`。
-
-### 第二步：创建登录账号
-
-进入：
-
-```txt
-Supabase → Authentication → Users → Add user
-```
-
-创建：
-
-- 总经理邮箱账号；
-- 每个销售邮箱账号；
-- 管理员邮箱账号。
-
-建议关闭公开注册，只由后台创建内部账号。
-
-### 第三步：配置 app_users 角色
-
-创建 Auth 用户后，在 Supabase SQL Editor 执行类似语句。
-
-#### 总经理账号
-
-```sql
-insert into public.app_users (id, email, name, role, enabled)
-select id, email, '总经理', 'general_manager', true
-from auth.users
-where email = 'boss@example.com'
-on conflict (id) do update
-set name = excluded.name,
-    role = excluded.role,
-    enabled = excluded.enabled,
-    email = excluded.email;
-```
-
-#### 销售账号
-
-```sql
-insert into public.app_users (id, email, name, role, enabled, team_name)
-select id, email, '销售A', 'sales', true, '华北销售组'
-from auth.users
-where email = 'sales-a@example.com'
-on conflict (id) do update
-set name = excluded.name,
-    role = excluded.role,
-    enabled = excluded.enabled,
-    team_name = excluded.team_name,
-    email = excluded.email;
-```
-
-#### 管理员账号
-
-```sql
-insert into public.app_users (id, email, name, role, enabled)
-select id, email, '系统管理员', 'admin', true
-from auth.users
-where email = 'admin@example.com'
-on conflict (id) do update
-set name = excluded.name,
-    role = excluded.role,
-    enabled = excluded.enabled,
-    email = excluded.email;
-```
-
-### 第四步：配置 Netlify 环境变量
-
-Netlify 后台：
-
-```txt
-Site configuration → Environment variables
-```
-
-添加：
+## 3. Netlify 只需要 2 个环境变量
 
 ```txt
 SUPABASE_URL=你的 Supabase Project URL
-SUPABASE_ANON_KEY=你的 Supabase anon key
-SUPABASE_SERVICE_ROLE_KEY=你的 Supabase service_role key
+SUPABASE_ANON_KEY=你的 Supabase anon / publishable key
 ```
 
-注意：
-
-- `SUPABASE_ANON_KEY` 会给前端登录使用；
-- `SUPABASE_SERVICE_ROLE_KEY` 只在 Netlify Functions 服务端使用，不能写入前端代码。
-
-### 第五步：部署到 Netlify
-
-GitHub 部署：
-
-1. 上传本项目到 GitHub；
-2. Netlify → Add new site → Import an existing project；
-3. Build command：
-
-```bash
-npm run build
-```
-
-4. Publish directory：
-
-```bash
-.
-```
-
-5. Deploy。
-
-## 4. 使用方法
-
-### 销售
-
-1. 用销售邮箱和密码登录；
-2. 只能看到自己名下项目；
-3. 新增项目自动归属自己；
-4. 不能把项目转给其他销售。
-
-### 总经理
-
-1. 用总经理邮箱登录；
-2. 查看全量项目；
-3. 按负责人、区域、产品线、销售阶段筛选；
-4. 新增项目时可以指定项目归属销售；
-5. 可以修改基础配置。
-
-### 管理员
-
-拥有总经理权限，并用于系统维护。
-
-## 5. 安全设计
-
-本版本不是单纯前端隐藏数据，而是三层限制：
-
-1. 前端根据角色隐藏/禁用部分选项；
-2. Netlify Functions 校验 Supabase access token 和 app_users 角色；
-3. Supabase PostgreSQL 开启 RLS，通过 `owner_user_id = auth.uid()` 限制销售只能访问自己项目。
-
-## 6. 常见问题
-
-### 登录成功后提示“账号尚未配置角色”
-
-说明 Supabase Auth 用户已经创建，但 `public.app_users` 表里没有该用户的角色记录。
-
-解决方法：执行 README 第三步的 SQL。
-
-### 销售看不到项目
-
-检查项目的 `owner_user_id` 是否等于该销售在 `app_users` 中的 id。
-
-### 总经理看不到全量
-
-检查 `app_users.role` 是否为：
+不再需要：
 
 ```txt
-general_manager
+SUPABASE_SERVICE_ROLE_KEY
 ```
 
-或：
+旧变量可以删除，也可以保留；这一版代码不会读取它。
+
+## 4. 部署方法
+
+1. 解压本 ZIP；
+2. 用本 ZIP 的全部内容覆盖 GitHub 仓库旧代码；
+3. 提交 GitHub；
+4. Netlify 重新部署：
 
 ```txt
-admin
+Deploys → Trigger deploy → Deploy project without cache
 ```
+
+5. 用无痕窗口打开：
+
+```txt
+https://zwaycrm.netlify.app
+```
+
+6. 用 `chenqiu@qq.com` 登录。
+
+## 5. Supabase 检查
+
+确认你已执行过 `database/schema.sql`。
+
+确认总经理账号：
+
+```sql
+select id, email, name, role, enabled
+from public.app_users
+where lower(email) = lower('chenqiu@qq.com');
+```
+
+应显示：
+
+```txt
+role = general_manager
+enabled = true
+```
+
+## 6. 如果仍然 403
+
+重点检查：
+
+```txt
+SUPABASE_URL
+SUPABASE_ANON_KEY
+```
+
+这两个必须来自同一个 Supabase 项目。
