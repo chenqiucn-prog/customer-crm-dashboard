@@ -1,0 +1,20 @@
+{
+  "name": "customer-crm-netlify-supabase-auth-roles",
+  "version": "2.0.0",
+  "private": true,
+  "description": "客户项目管理暨总经理驾驶舱 - Supabase Auth 账号权限多人协作版",
+  "type": "module",
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "echo \"Static site - no build required\""
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.38.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

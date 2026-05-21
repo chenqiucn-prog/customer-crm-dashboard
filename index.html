@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>客户项目管理暨总经理驾驶舱 - 账号权限版</title>
+  <link rel="stylesheet" href="./assets/styles.css" />
+</head>
+<body>
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div class="login-logo">CRM</div>
+    <h1>客户项目管理系统</h1>
+    <p>账号权限多人协作版：销售只看自己项目，总经理/管理员看全量项目。</p>
+    <input id="loginEmail" type="email" placeholder="邮箱" />
+    <div style="height:10px"></div>
+    <input id="loginPassword" type="password" placeholder="密码" />
+    <div style="height:14px"></div>
+    <button id="loginBtn" class="btn primary" style="width:100%">登录</button>
+    <p id="loginMsg" style="margin-top:14px;color:#b91c1c"></p>
+  </div>
+</div>
+
+<div id="appRoot" class="app hidden">
+  <aside>
+    <div class="brand">
+      <div class="logo">CRM</div>
+      <div>
+        <h1>客户项目管理系统</h1>
+        <span>账号权限 · 多人协作</span>
+      </div>
+    </div>
+    <div class="nav">
+      <div class="nav-title">业务模块</div>
+      <button class="active" data-page="dashboard">📊 总经理驾驶舱</button>
+      <button data-page="projects">📋 项目明细台账</button>
+      <button data-page="keyprojects">⭐ 重点项目推进</button>
+      <button data-page="funnel">🔻 销售漏斗分析</button>
+      <button data-page="settings">⚙️ 基础配置</button>
+      <div class="nav-title">系统设计</div>
+      <button data-page="architecture">🧩 权限架构</button>
+      <small>销售账号只能访问自己名下项目；总经理/管理员账号可访问全量项目。</small>
+    </div>
+    <div class="user-card">
+      <strong id="currentUserName">-</strong>
+      <div id="currentUserRole">-</div>
+      <div id="currentUserEmail">-</div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <div>
+        <h2 id="pageTitle">总经理驾驶舱</h2>
+        <p id="pageDesc">集中查看销售规模、加权预测、重点项目、区域与产品线机会分布。</p>
+      </div>
+      <div class="top-actions">
+        <button class="btn" id="refreshBtn">刷新</button>
+        <button class="btn" id="exportBtn">导出</button>
+        <button class="btn primary" id="newBtn">新增项目</button>
+        <button class="btn danger" id="logoutBtn">退出</button>
+      </div>
+    </div>
+
+    <div class="notice" id="statusNotice">正在连接云端数据库...</div>
+
+    <section id="dashboard" class="page active">
+      <div class="grid kpis">
+        <div class="card kpi"><div class="label">可见项目数</div><div class="value" id="kpiCount">0</div><div class="hint" id="scopeHint">按账号权限过滤</div></div>
+        <div class="card kpi"><div class="label">预计成交金额</div><div class="value" id="kpiAmount">0</div><div class="hint">项目预计合同额</div></div>
+        <div class="card kpi"><div class="label">加权预测金额</div><div class="value" id="kpiWeighted">0</div><div class="hint">金额 × 阶段赢率</div></div>
+        <div class="card kpi"><div class="label">A级/S级项目</div><div class="value" id="kpiA">0</div><div class="hint">优先管理对象</div></div>
+        <div class="card kpi"><div class="label">需总经理介入</div><div class="value" id="kpiBoss">0</div><div class="hint">关键节点支持</div></div>
+      </div>
+
+      <div class="grid two mt">
+        <div class="card"><div class="section-title"><h3>销售漏斗金额分布</h3><span>按销售阶段统计</span></div><div id="stageBars"></div></div>
+        <div class="card"><div class="section-title"><h3>区域成交预测</h3><span>区域来自配置表</span></div><div id="regionBars"></div></div>
+      </div>
+
+      <div class="grid two mt">
+        <div class="card"><div class="section-title"><h3>产品线机会分布</h3><span>产品线/解决方案</span></div><div id="productBars"></div></div>
+        <div class="card"><div class="section-title"><h3>风险与预警</h3><span>高风险、重点、需管理层支持</span></div><div id="riskList"></div></div>
+      </div>
+    </section>
+
+    <section id="projects" class="page">
+      <div class="card">
+        <div class="section-title"><h3>项目明细台账</h3><span id="projectScopeText">仅显示当前账号可见项目</span></div>
+        <div class="filters">
+          <input id="searchText" placeholder="搜索单位、联系人、研究方向、产品名" />
+          <select id="filterRegion"><option value="">全部区域</option></select>
+          <select id="filterProductLine"><option value="">全部产品线</option></select>
+          <select id="filterStage"><option value="">全部阶段</option></select>
+          <select id="filterOwner"><option value="">全部负责人</option></select>
+          <select id="filterRisk"><option value="">全部风险</option></select>
+          <button class="btn" id="resetFilterBtn">重置</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>操作</th><th>负责人</th><th>区域</th><th>分类</th><th>单位名称</th><th>联系人</th><th>客户等级</th>
+                <th>产品线/解决方案</th><th>具体产品名</th><th>项目预算</th><th>预计成交金额</th>
+                <th>销售阶段</th><th>赢率</th><th>风险</th><th>下一步动作</th><th>总经理介入</th>
+              </tr>
+            </thead>
+            <tbody id="projectRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="keyprojects" class="page">
+      <div class="card">
+        <div class="section-title"><h3>TOP重点项目推进表</h3><span>按可见项目范围统计</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>排名</th><th>客户单位</th><th>负责人</th><th>产品线</th><th>具体产品名</th><th>优先级</th><th>阶段</th><th>预计成交</th><th>加权预测</th><th>下一步动作</th><th>风险</th><th>总经理介入</th></tr></thead>
+            <tbody id="keyRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="funnel" class="page">
+      <div class="grid two">
+        <div class="card"><div class="section-title"><h3>销售漏斗分析</h3><span>阶段、建议赢率均可配置</span></div><div id="funnelBars"></div></div>
+        <div class="card"><div class="section-title"><h3>阶段管理提示</h3><span>销售例会复盘</span></div><div id="stageTips"></div></div>
+      </div>
+    </section>
+
+    <section id="settings" class="page">
+      <div class="settings-grid">
+        <div class="card">
+          <div class="section-title"><h3>区域配置</h3><span>仅总经理/管理员可保存</span></div>
+          <div class="pill-list" id="regionPills"></div>
+          <div class="inline-form"><input id="newRegion" placeholder="新增区域，例如：京津冀、华南、东北" /><button class="btn primary" id="addRegionBtn">添加</button></div>
+        </div>
+        <div class="card">
+          <div class="section-title"><h3>产品线/解决方案 与 具体产品名</h3><span>具体产品名跟随产品线联动</span></div>
+          <div class="form-grid compact">
+            <select id="configProductLine"></select>
+            <input id="newProductName" class="span2" placeholder="新增具体产品名" />
+            <button class="btn primary" id="addProductNameBtn">添加产品名</button>
+            <button class="btn" id="addProductLineBtn">新增产品线</button>
+          </div>
+          <div class="mt-sm" id="productPills"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="architecture" class="page">
+      <div class="grid three">
+        <div class="card module-card"><h4>销售账号 sales</h4><p>只能查看、编辑、删除 owner_user_id 等于自己的项目；新增项目自动归属自己。</p></div>
+        <div class="card module-card"><h4>总经理 general_manager</h4><p>查看全量项目，可按负责人筛选、可新建项目并指定归属销售。</p></div>
+        <div class="card module-card"><h4>管理员 admin</h4><p>拥有全量项目和配置管理权限，用于系统维护。</p></div>
+      </div>
+      <div class="card mt">
+        <div class="section-title"><h3>后端权限策略</h3><span>不是单纯前端隐藏</span></div>
+        <div class="module-list">
+          <div class="module-card"><h4>Supabase Auth</h4><p>前端邮箱密码登录，获取 access token。</p></div>
+          <div class="module-card"><h4>Netlify Functions</h4><p>每次 API 请求校验 token，并读取 app_users 角色。</p></div>
+          <div class="module-card"><h4>PostgreSQL RLS</h4><p>数据库层也设置 owner_user_id 与角色策略，形成双层防护。</p></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="drawer" id="drawer">
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <h3 id="drawerTitle">新增销售项目</h3>
+      <button class="close" id="closeDrawerBtn">关闭</button>
+    </div>
+    <div class="form-grid">
+      <input id="f_id" type="hidden" />
+      <select id="f_ownerUserId"></select>
+      <select id="f_region"></select>
+      <select id="f_category"></select>
+      <input id="f_company" placeholder="单位名称" />
+      <input id="f_department" placeholder="院系 / 科室 / 实验室" />
+      <input id="f_contact" placeholder="联系人姓名" />
+      <input id="f_title" placeholder="职务" />
+      <select id="f_level"></select>
+      <select id="f_productLine"></select>
+      <select id="f_productName"></select>
+      <input id="f_budget" type="number" placeholder="项目预算(元)" />
+      <input id="f_amount" type="number" placeholder="预计成交金额(元)" />
+      <input id="f_win" type="number" min="0" max="1" step=".05" placeholder="商机赢率，如0.5" />
+      <select id="f_stage"></select>
+      <select id="f_team"></select>
+      <select id="f_priority"></select>
+      <select id="f_key"></select>
+      <select id="f_risk"></select>
+      <select id="f_boss"></select>
+      <textarea id="f_research" class="span3" placeholder="研究方向 / 应用场景"></textarea>
+      <textarea id="f_next" class="span3" placeholder="下一步动作"></textarea>
+      <textarea id="f_note" class="span3" placeholder="备注 / 风险原因"></textarea>
+      <button class="btn primary span3" id="saveProjectBtn">保存项目</button>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script type="module" src="./assets/app.js"></script>
+</body>
+</html>
